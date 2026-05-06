@@ -47,6 +47,8 @@ export const config = {
   api: {
     /** Port the Express REST API (consumed by the Admin Portal) binds to. */
     port: parsePort('API_PORT', 3000),
+    /** Shared bearer token expected from the Admin Portal. */
+    key: requireEnv('AGENT_API_KEY', 'dev-agent-api-key'),
   },
   webhooks: {
     /**

@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { ConnectionService } from '../../services/connectionService'
 import type { UniversityAgent } from '../../agent'
 import { asyncHandler } from '../middleware/asyncHandler'
+import { optionalString, requireObject } from '../validation'
 
 /**
  * DIDComm connection endpoints.
@@ -25,8 +26,10 @@ export function buildConnectionsRouter(agent: UniversityAgent): Router {
   router.post(
     '/invitations',
     asyncHandler(async (req, res) => {
-      // TODO(team): validate body
-      const result = await connections.createInvitation(req.body)
+      const body = requireObject(req.body ?? {})
+      const result = await connections.createInvitation({
+        label: optionalString(body, 'label'),
+      })
       res.status(201).json(result)
     })
   )

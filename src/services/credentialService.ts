@@ -1,4 +1,5 @@
 import type { UniversityAgent } from '../agent'
+import { config } from '../config'
 
 /**
  * Credential issuance lifecycle.
@@ -24,31 +25,101 @@ import type { UniversityAgent } from '../agent'
 export class CredentialService {
   constructor(private readonly agent: UniversityAgent) {}
 
+  private toTimestamp(record: { createdAt: Date; updatedAt?: Date }): string {
+    return (record.updatedAt ?? record.createdAt).toISOString()
+  }
+
+  private async getCredentialDefinitionId(credentialExchangeId: string): Promise<string | undefined> {
+    try {
+      const formatData = await this.agent.credentials.getFormatData(credentialExchangeId)
+      const offer = formatData.offer as { anoncreds?: { cred_def_id?: string } } | undefined
+      return offer?.anoncreds?.cred_def_id
+    } catch {
+      return undefined
+    }
+  }
+
   /**
    * Create a credential offer + OOB invitation for one student.
    *
-   * TODO(team):
-   *   1. Build the AnonCreds credential preview from `params.attributes`
-   *   2. Call `agent.credentials.createOffer({ protocolVersion: 'v2',
-   *        credentialFormats: { anoncreds: { credentialDefinitionId, attributes } } })`
-   *   3. Wrap the resulting offer message in an OOB invitation via
-   *      `agent.oob.createInvitation({ messages: [offerMessage] })`
-   *   4. Render the URL with `outOfBandInvitation.toUrl({ domain })`
-   *   5. Return both the URL (for the Admin Portal to email) and the
-   *      credentialExchangeId (for status lookups + correlation in events)
+   * Returns both the URL (for the Admin Portal to email) and the
+   * credentialExchangeId (for status lookups + correlation in events).
    */
   async createOfferInvitation(_params: {
     credentialDefinitionId: string
     attributes: Array<{ name: string; value: string }>
   }): Promise<{ invitationUrl: string; credentialExchangeId: string }> {
-    throw new Error('Not implemented: CredentialService.createOfferInvitation')
+    const { message, credentialRecord } = await this.agent.credentials.createOffer({
+      protocolVersion: 'v2',
+      credentialFormats: {
+        anoncreds: {
+          credentialDefinitionId: _params.credentialDefinitionId,
+          attributes: _params.attributes,
+        },
+      },
+    })
+
+    const outOfBandRecord = await this.agent.oob.createInvitation({
+      messages: [message],
+    })
+
+    return {
+      invitationUrl: outOfBandRecord.outOfBandInvitation.toUrl({ domain: config.agent.endpoint }),
+      credentialExchangeId: credentialRecord.id,
+    }
+  }
+
+  async createBatchOfferInvitations(_params: {
+    credentialDefinitionId: string
+    students: Array<{
+      externalId?: string
+      email?: string
+      attributes: Array<{ name: string; value: string }>
+    }>
+  }): Promise<{
+    offers: Array<{
+      externalId?: string
+      email?: string
+      invitationUrl: string
+      credentialExchangeId: string
+    }>
+    failures: Array<{ externalId?: string; email?: string; message: string }>
+  }> {
+    const offers: Array<{
+      externalId?: string
+      email?: string
+      invitationUrl: string
+      credentialExchangeId: string
+    }> = []
+    const failures: Array<{ externalId?: string; email?: string; message: string }> = []
+
+    for (const student of _params.students) {
+      try {
+        const offer = await this.createOfferInvitation({
+          credentialDefinitionId: _params.credentialDefinitionId,
+          attributes: student.attributes,
+        })
+        offers.push({
+          externalId: student.externalId,
+          email: student.email,
+          ...offer,
+        })
+      } catch (error) {
+        failures.push({
+          externalId: student.externalId,
+          email: student.email,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return { offers, failures }
   }
 
   /**
    * Look up the current state of a credential exchange.
    *
-   * TODO(team): call `agent.credentials.getById(credentialExchangeId)` and
-   * project to a DTO shape for the Admin Portal.
+   * Project a Credo credential exchange record to an Admin Portal DTO.
    */
   async getStatus(_credentialExchangeId: string): Promise<{
     id: string
@@ -57,18 +128,34 @@ export class CredentialService {
     credentialDefinitionId?: string
     updatedAt: string
   }> {
-    throw new Error('Not implemented: CredentialService.getStatus')
+    const record = await this.agent.credentials.getById(_credentialExchangeId)
+
+    return {
+      id: record.id,
+      state: record.state,
+      connectionId: record.connectionId,
+      credentialDefinitionId: await this.getCredentialDefinitionId(record.id),
+      updatedAt: this.toTimestamp(record),
+    }
   }
 
   /**
    * List every credential exchange, optionally filtered by state.
    *
-   * TODO(team): call `agent.credentials.getAll()`, optionally filter, and
-   * project to DTOs.
+   * List Credo credential exchanges, optionally filtered by state.
    */
   async list(_filter?: { state?: string }): Promise<
     Array<{ id: string; state: string; connectionId?: string; updatedAt: string }>
   > {
-    throw new Error('Not implemented: CredentialService.list')
+    const records = await this.agent.credentials.getAll()
+
+    return records
+      .filter((record) => (_filter?.state ? record.state === _filter.state : true))
+      .map((record) => ({
+        id: record.id,
+        state: record.state,
+        connectionId: record.connectionId,
+        updatedAt: this.toTimestamp(record),
+      }))
   }
 }

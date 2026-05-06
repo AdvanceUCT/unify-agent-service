@@ -7,6 +7,7 @@ import { buildCredentialsRouter } from './credentials'
 import { buildDidsRouter } from './dids'
 import { buildHealthRouter } from './health'
 import { buildSchemasRouter } from './schemas'
+import { buildStatusRouter } from './status'
 
 /**
  * Mount every sub-router under a single root.
@@ -17,6 +18,7 @@ export function buildApiRouter(agent: UniversityAgent): Router {
   const router = Router()
 
   router.use('/health', buildHealthRouter(agent))
+  router.use('/status', buildStatusRouter(agent))
   router.use('/dids', buildDidsRouter(agent))
   router.use('/', buildSchemasRouter(agent))
   router.use('/connections', buildConnectionsRouter(agent))

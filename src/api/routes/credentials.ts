@@ -3,7 +3,9 @@ import { Router } from 'express'
 import { CredentialService } from '../../services/credentialService'
 import { RevocationService } from '../../services/revocationService'
 import type { UniversityAgent } from '../../agent'
+import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
+import { optionalString, requireAttributes, requireObject, requireString } from '../validation'
 
 /**
  * Credential issuance + revocation endpoints.
@@ -31,8 +33,37 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.post(
     '/offers',
     asyncHandler(async (req, res) => {
-      // TODO(team): validate body
-      const result = await credentials.createOfferInvitation(req.body)
+      const body = requireObject(req.body)
+      const result = await credentials.createOfferInvitation({
+        credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
+        attributes: requireAttributes(body),
+      })
+      res.status(201).json(result)
+    })
+  )
+
+  router.post(
+    '/offers/batch',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body)
+      const students = body.students
+
+      if (!Array.isArray(students) || students.length === 0) {
+        throw new AppError(400, 'students must be a non-empty array.')
+      }
+
+      const result = await credentials.createBatchOfferInvitations({
+        credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
+        students: students.map((student, index) => {
+          const value = requireObject(student, `students[${index}]`)
+          return {
+            externalId: optionalString(value, 'externalId'),
+            email: optionalString(value, 'email'),
+            attributes: requireAttributes(value),
+          }
+        }),
+      })
+
       res.status(201).json(result)
     })
   )
@@ -57,10 +88,10 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.post(
     '/:id/revoke',
     asyncHandler(async (req, res) => {
-      // TODO(team): validate body
+      const body = requireObject(req.body ?? {})
       const result = await revocations.revoke({
         credentialExchangeId: req.params.id,
-        reason: req.body?.reason,
+        reason: optionalString(body, 'reason'),
       })
       res.json(result)
     })
