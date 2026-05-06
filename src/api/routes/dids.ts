@@ -29,7 +29,20 @@ export function buildDidsRouter(agent: UniversityAgent): Router {
   router.post(
     '/issuer',
     asyncHandler(async (req, res) => {
-      // TODO(team): validate req.body { seed: string; endorserDid?: string }
+      // TODO(AD-69 / DID owner): replace this raw body pass-through with a
+      // small validator before implementing the service method.
+      //
+      // Expected input for local BCovrin Test bootstrap:
+      //   { seed: string; endorserDid?: string }
+      //
+      // Human + AI handoff notes:
+      //   - Treat `seed` like a secret. Never log it, echo it in errors, or
+      //     return it to the Admin Portal.
+      //   - Validate length/shape here so DidService can assume trusted input.
+      //   - Decide idempotency before wiring the Admin Portal: either return
+      //     the existing issuer DID on repeat calls or return a 409 with a
+      //     clear "issuer DID already exists" message. Do not silently create
+      //     multiple issuer DIDs for the same university wallet.
       const result = await dids.createIssuerDid(req.body)
       res.status(201).json(result)
     })

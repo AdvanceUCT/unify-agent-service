@@ -71,6 +71,13 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.get(
     '/',
     asyncHandler(async (req, res) => {
+      // TODO(AD-73 / credential status owner):
+      // This list endpoint is useful for polling, but it is not yet a complete
+      // Admin Portal status contract. Confirm with the Admin Portal team which
+      // fields their table needs: external student id, email, current state,
+      // connection id, credential definition id, last transition time, and any
+      // failure reason. Add only stable fields here; avoid leaking raw Credo
+      // records because their shape can change across Credo versions.
       const state = typeof req.query.state === 'string' ? req.query.state : undefined
       const result = await credentials.list(state ? { state } : undefined)
       res.json(result)
@@ -80,6 +87,12 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.get(
     '/:id',
     asyncHandler(async (req, res) => {
+      // TODO(AD-73 / credential status owner):
+      // This is the single-student polling endpoint the Admin Portal will call
+      // after AD-72 returns a `credentialExchangeId`. Acceptance criteria should
+      // include polling through the full happy path:
+      //   offer-sent -> request-received -> credential-issued -> done
+      // and returning a useful 404 when the id is unknown.
       const result = await credentials.getStatus(req.params.id)
       res.json(result)
     })

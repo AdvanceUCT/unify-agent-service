@@ -48,6 +48,11 @@ export const config = {
     /** Port the Express REST API (consumed by the Admin Portal) binds to. */
     port: parsePort('API_PORT', 3000),
     /** Shared bearer token expected from the Admin Portal. */
+    // TODO(AD-75 hardening):
+    // The fallback is for local-only developer convenience. For demos, staging,
+    // and production, set AGENT_API_KEY explicitly in the environment and keep
+    // the same value in the Admin Portal. If this falls back to
+    // `dev-agent-api-key`, auth is wired but not operationally secure.
     key: requireEnv('AGENT_API_KEY', 'dev-agent-api-key'),
   },
   webhooks: {

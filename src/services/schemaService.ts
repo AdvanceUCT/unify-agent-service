@@ -56,6 +56,12 @@ export class SchemaService {
    * Anchor a credential schema on the Indy ledger.
    *
    * Calls the Indy VDR AnonCreds registry and returns the resulting schemaId.
+   *
+   * TODO(AD-70 dependency note):
+   * This method is already wired to the real Credo AnonCreds registry, but it
+   * cannot be proven until AD-69 returns a real issuer DID and AD-68 shows the
+   * BCovrin pool as reachable. When testing, use the exact DID returned by
+   * `GET /api/dids/issuer`; do not paste a random DID from another wallet.
    */
   async registerSchema(_params: {
     issuerDid: string
@@ -86,6 +92,20 @@ export class SchemaService {
    * Anchor a credential definition tied to a schema on the Indy ledger.
    *
    * Set `supportRevocation: true` if a revocation registry will be created.
+   *
+   * TODO(AD-71 contract decision):
+   * Jira says credential definition + revocation registry creation should be
+   * "triggered automatically after schema creation". The repo currently
+   * exposes this as separate endpoints:
+   *   POST /api/schemas
+   *   POST /api/credential-definitions
+   *   POST /api/credential-definitions/:cdId/revocation-registries
+   *
+   * Before wiring the Admin Portal, decide whether to keep the explicit
+   * multi-step API or add one orchestration endpoint that creates schema,
+   * credential definition, and revocation registry in order. If automation is
+   * required, keep these lower-level methods and add the orchestrator above
+   * them so retry/error handling stays clear.
    */
   async registerCredentialDefinition(_params: {
     issuerDid: string
@@ -118,6 +138,14 @@ export class SchemaService {
    * Optional companion to a revocation-enabled credential definition.
    *
    * Registers both the revocation registry definition and its initial status list.
+   *
+   * TODO(AD-71 test proof):
+   * After AD-69 and AD-68 are complete, prove this with a revocation-enabled
+   * credential definition and confirm both values are returned:
+   *   - revocationRegistryDefinitionId
+   *   - revocationStatusListTimestamp
+   * If `supportRevocation` was false on the credential definition, this should
+   * fail with a clear 4xx/422-style error rather than a vague internal error.
    */
   async registerRevocationRegistry(_params: {
     issuerDid: string

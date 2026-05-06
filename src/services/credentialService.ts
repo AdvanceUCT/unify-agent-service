@@ -44,6 +44,17 @@ export class CredentialService {
    *
    * Returns both the URL (for the Admin Portal to email) and the
    * credentialExchangeId (for status lookups + correlation in events).
+   *
+   * TODO(AD-72 proof requirement):
+   * Creating this record only proves that an offer invitation was generated.
+   * Real issuance is not proven until the student wallet opens the returned
+   * invitation URL, accepts the offer, and `getStatus()` eventually reaches
+   * Credo's terminal `done` state.
+   *
+   * Dependency chain:
+   *   AD-69 issuer DID -> AD-70 schema -> AD-71 cred-def -> this method.
+   * Do not call this "issuing works" if `credentialDefinitionId` was copied
+   * from a stale environment or from another agent wallet.
    */
   async createOfferInvitation(_params: {
     credentialDefinitionId: string
@@ -85,6 +96,13 @@ export class CredentialService {
     }>
     failures: Array<{ externalId?: string; email?: string; message: string }>
   }> {
+    // TODO(AD-72 / Admin Portal integration):
+    // Today this method returns email-ready deep links but does not persist the
+    // mapping from `externalId`/`email` to `credentialExchangeId`. That is OK
+    // for a stateless API response, but the Admin Portal needs to store that
+    // mapping immediately if it wants reliable retry, polling, or audit after a
+    // page refresh. If persistence belongs in this service instead, add an
+    // explicit storage module rather than hiding writes inside this loop.
     const offers: Array<{
       externalId?: string
       email?: string
@@ -120,6 +138,13 @@ export class CredentialService {
    * Look up the current state of a credential exchange.
    *
    * Project a Credo credential exchange record to an Admin Portal DTO.
+   *
+   * TODO(AD-73 / status owner):
+   * Confirm the exact states the Admin Portal should display. Credo returns
+   * protocol states such as `offer-sent`, `request-received`,
+   * `credential-issued`, and `done`; the UI may want friendlier labels like
+   * Offered, Accepted, Issued, or Failed. Keep that mapping in one place so
+   * tests can cover it.
    */
   async getStatus(_credentialExchangeId: string): Promise<{
     id: string
