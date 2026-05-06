@@ -17,8 +17,6 @@ import { AppError } from '../errors'
  * Credo/Askar encrypted wallet volume (agent-data). No separate database
  * layer is needed for the PoC.
  *
- * See docs-local/implementation-guide-ad68-ad69.md for full implementation
- * context, error handling decisions, and the done definition.
  */
 export class DidService {
   constructor(private readonly agent: UniversityAgent) {}
