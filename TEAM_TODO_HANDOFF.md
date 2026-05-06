@@ -6,64 +6,74 @@ done. Keep it updated when Jira status changes.
 
 ## Current Critical Path
 
-1. AD-68: prove the Dockerized Credo service can reach BCovrin Test.
-2. AD-69: create and persist the university issuer DID.
-3. AD-70: register the credential schema with the issuer DID.
+1. ~~AD-68: prove the Dockerized Credo service can reach BCovrin Test.~~ **DONE**
+2. ~~AD-69: create and persist the university issuer DID.~~ **DONE**
+3. AD-70: register the credential schema with the issuer DID. ← **current blocker**
 4. AD-71: register the credential definition and revocation registry.
 5. AD-72: create credential offer invitations for students.
 6. AD-73: expose reliable per-student credential status to the Admin Portal.
 
-The service currently starts and the REST API is reachable. That is not the
-same as proving issuance. Issuance is proven only when a wallet accepts an
-offer and the credential exchange reaches Credo's terminal `done` state.
+AD-68 and AD-69 are proven complete as of 2026-05-07. The ledger is reachable
+and the issuer DID is anchored on BCovrin Test and persisted in the Askar
+wallet. AD-70 is now unblocked — Caleb can call `POST /api/schemas` using the
+DID returned from `GET /api/dids/issuer` against a running container.
 
-## AD-68 - Ledger Connectivity
+Issuance is proven only when a wallet accepts an offer and the credential
+exchange reaches Credo's terminal `done` state.
 
-Owner in Jira: Joshua Wood.
+## AD-68 - Ledger Connectivity — DONE
 
-Primary files:
-- `src/agent/networks.ts`
-- `src/services/statusService.ts`
-- `src/agent/modules.ts`
+Owner in Jira: Joshua Wood. Completed 2026-05-07.
 
-Current repo evidence:
-- `GET /api/health` can pass while ledger access is still broken.
-- `GET /api/status` is the real readiness check for ledger connectivity.
+Root cause was a stale genesis: `networks.ts` only contained the Node1
+transaction (138.197.138.255) which was decommissioned in seqNo:11 of the
+live ledger. The active validators are now BCovrin01–04 at 130.107.207.129.
 
-Done means:
-- `docker compose up --build -d` starts cleanly.
-- `GET /api/health` returns `status: "ok"`.
-- Authenticated `GET /api/status` returns `status: "ok"`.
-- The status response has `ledger.reachable: true`.
+Resolution:
+- Genesis transactions moved out of source code into `genesis/bcorvin-test.txn`
+  (14 transactions, one JSON object per line).
+- `src/agent/networks.ts` now reads that file at runtime via `fs.readFileSync`
+  anchored to `__dirname` so it resolves correctly from the compiled output.
+- `Dockerfile` copies `genesis/` into both builder and runner stages.
+- To update the genesis in future: edit `genesis/bcorvin-test.txn` and rebuild.
+  Do not re-embed genesis as a TypeScript string.
 
-If `/api/status` reports a pool timeout, check BCovrin availability and the
-genesis transactions before changing unrelated service code.
+Proof: authenticated `GET /api/status` returns `ledger.reachable: true`.
 
-## AD-69 - Issuer DID Creation
+## AD-69 - Issuer DID Creation — DONE
 
-Owner in Jira: Joshua Wood.
+Owner in Jira: Joshua Wood. Completed 2026-05-07.
 
 Primary files:
 - `src/api/routes/dids.ts`
 - `src/services/didService.ts`
-- `src/agent/modules.ts`
+- `src/services/__tests__/didService.test.ts` (new)
 
-This is the main blocker for schema, credential-definition, and offer proof.
-Without a real issuer DID owned by this wallet, downstream endpoints can only
-be structurally tested.
+What was implemented:
+- `POST /api/dids/issuer` — accepts `{ alias?: string }`. Seed is generated
+  server-side via `crypto.randomBytes`; it is never accepted from the caller,
+  never logged, and never returned. Registers on BCovrin Test with role
+  `ENDORSER`, then imports into the Credo/Askar wallet via `agent.dids.import`.
+  Returns `{ did: "did:indy:bcovrin:test:<22-chars>" }` on 201.
+- `GET /api/dids/issuer` — returns the persisted DID (200) or 404 if not yet
+  created.
+- Second `POST` returns 409 with the existing DID in the body.
+- 10 unit tests added covering happy path, 409, 502 (network error), 502
+  (BCovrin non-200), null wallet, and multi-DID wallet guard.
+- Tests run in the Dockerfile builder stage (`RUN npm test` before
+  `RUN npm run build`) — a failing test blocks the image build.
 
-Done means:
-- `POST /api/dids/issuer` validates input and never logs the seed.
-- The DID is registered/anchored through the Credo Indy DID registrar.
-- `GET /api/dids/issuer` returns the same DID.
-- The same DID survives `docker compose restart`.
-- Repeating `POST /api/dids/issuer` is idempotent or returns a clear conflict;
-  it must not silently create multiple issuer DIDs.
+Storage decision resolved: DID and private key are persisted in the Credo/Askar
+encrypted wallet volume (`agent-data`). No separate database layer is used.
+The wallet volume survives `docker compose restart` but not `docker compose
+down -v` — document this as a known PoC limitation.
 
-Storage decision:
-Jira mentions database persistence, but this repo has no database layer. Either
-use Credo/Askar wallet persistence intentionally or add an explicit storage
-boundary. Do not hide ad hoc persistence in a service method.
+For production: replace BCovrin self-registration with an endorser-signed NYM
+transaction (Sovrin MainNet) or the Cheqd flow. A `TODO(production)` comment
+is in `createIssuerDid()` as a marker.
+
+Proof: `POST /api/dids/issuer` → 201 with `did:indy:bcovrin:test:` DID.
+`GET /api/dids/issuer` → same DID. Second POST → 409. All 10 tests pass.
 
 ## AD-70 - Schema Creation
 
@@ -73,11 +83,19 @@ Primary files:
 - `src/api/routes/schemas.ts`
 - `src/services/schemaService.ts`
 
-Current code calls Credo's real `registerSchema` API. It is blocked from final
-proof by AD-68 and AD-69.
+AD-68 and AD-69 are now complete. This ticket is unblocked.
+
+To get the issuer DID to use as `issuerDid` in the request body:
+```
+GET /api/dids/issuer  →  { did: "did:indy:bcovrin:test:..." }
+```
+
+Current code calls Credo's real `registerSchema` API and is structurally
+complete. It needs a live ledger connection and a real issuer DID to be proven
+end-to-end — both of which now exist.
 
 Done means:
-- Use the DID from `GET /api/dids/issuer`.
+- Use the DID from `GET /api/dids/issuer` as the `issuerDid` field.
 - `POST /api/schemas` returns a real `schemaId`.
 - A bad payload returns a useful 4xx error.
 - A ledger failure returns a clear operational error, not an ambiguous crash.

@@ -1,4 +1,9 @@
+import { randomBytes } from 'crypto'
+
+import { Hasher, KeyType, TypedArrayEncoder } from '@credo-ts/core'
+
 import type { UniversityAgent } from '../agent'
+import { AppError } from '../errors'
 
 /**
  * Issuer DID lifecycle.
@@ -8,76 +13,107 @@ import type { UniversityAgent } from '../agent'
  * credentials we sign. It must be created once during onboarding (via the
  * Admin Portal), then persisted and reused for every issuance.
  *
- * Useful Credo references:
- *   - `agent.dids.create({ method: 'indy', ... })`            create a DID
- *   - `agent.dids.resolve(did)`                               resolve a DID document
- *   - `agent.dids.getCreatedDids({ method: 'indy' })`         list DIDs we own
+ * Persistence: the DID record and its private key are stored inside the
+ * Credo/Askar encrypted wallet volume (agent-data). No separate database
+ * layer is needed for the PoC.
  *
- * See https://credo.js.org/guides/tutorials/dids for protocol-level detail.
+ * See docs-local/implementation-guide-ad68-ad69.md for full implementation
+ * context, error handling decisions, and the done definition.
  */
 export class DidService {
   constructor(private readonly agent: UniversityAgent) {}
 
   /**
-   * Return the issuer DID we've already created on the ledger, or null if
-   * the agent hasn't been bootstrapped yet.
+   * Return the issuer DID owned by this wallet, or null if the agent has not
+   * been bootstrapped yet.
    *
-   * TODO(AD-69 / Joshua):
-   * Implement this before Caleb's schema / credential-definition / offer
-   * endpoints can be proven end to end. Those endpoints all need a real
-   * issuer DID anchored on the target ledger.
-   *
-   * Suggested behavior:
-   *   1. Ask Credo for DIDs created by this wallet, filtered to Indy DIDs.
-   *   2. Return exactly one issuer DID if present.
-   *   3. Return null if none exists yet.
-   *   4. If more than one candidate exists, fail loudly with an AppError and
-   *      tell the operator to pick/clean the wallet. Multiple issuer DIDs make
-   *      schema and credential-definition ownership ambiguous.
-   *
-   * Persistence note:
-   * Jira says "persists it to the database", but this repo currently has no
-   * database layer. Credo's wallet can persist created DID records inside the
-   * Askar wallet volume. If the team still wants a separate DB row for Admin
-   * Portal display/audit, add that storage boundary explicitly instead of
-   * hiding a file write in this service.
+   * Throws 500 if the wallet somehow contains more than one Indy DID — that
+   * should never happen and indicates wallet corruption or a bug.
    */
   async getIssuerDid(): Promise<string | null> {
-    throw new Error('Not implemented: DidService.getIssuerDid')
+    const dids = await this.agent.dids.getCreatedDids({ method: 'indy' })
+
+    if (dids.length > 1) {
+      throw new AppError(
+        500,
+        'Multiple issuer DIDs found in wallet. This should never happen — inspect the wallet and remove duplicates before continuing.',
+      )
+    }
+
+    return dids[0]?.did ?? null
   }
 
   /**
-   * Create the university's issuer DID on the BCovrin ledger.
+   * Create the university's issuer DID on BCovrin Test and import it into the
+   * Credo wallet so this agent can sign as that DID.
    *
-   * BCovrin Test publishes a self-serve endpoint at http://test.bcovrin.vonx.io
-   * that will register a DID for you given a seed. In production (Sovrin /
-   * Cheqd) this will involve a steward-signed registration ceremony instead.
+   * This is a one-time onboarding operation. Calling it again when a DID
+   * already exists returns a 409 with the existing DID — it never creates a
+   * second issuer identity.
    *
-   * TODO(team):
-   *   1. Call `agent.dids.create({ method: 'indy', options: { ... } })`
-   *   2. Persist the resulting DID somewhere durable (genesis-friendly)
-   *   3. Return the unqualified DID string for the Admin Portal to display
-   *
-   * TODO(AD-69 / Joshua) implementation checklist:
-   *   - Validate and consume a 32-byte/32-character seed from the route layer.
-   *   - Register/anchor the DID using the Credo 0.5 Indy DID registrar APIs
-   *     already wired in `src/agent/modules.ts`.
-   *   - Keep this operation idempotent. A second POST after success should not
-   *     create a second issuer identity.
-   *   - Store enough information for `getIssuerDid()` to return the same DID
-   *     after `docker compose restart`.
-   *   - Do not mark AD-69 done until this proof works:
-   *       POST /api/dids/issuer -> { did }
-   *       GET  /api/dids/issuer -> same { did }
-   *       docker compose restart
-   *       GET  /api/dids/issuer -> same { did }
-   *
-   * Downstream impact:
-   * Until this method works, AD-70, AD-71, and AD-72 can only be considered
-   * structurally implemented. They cannot prove real ledger writes or real
-   * credential offers without a valid issuer DID.
+   * The seed is generated server-side and never logged, returned, or included
+   * in any error body. The Admin Portal receives only the resulting DID.
    */
-  async createIssuerDid(_params: { seed: string; endorserDid?: string }): Promise<{ did: string }> {
-    throw new Error('Not implemented: DidService.createIssuerDid')
+  async createIssuerDid(params: { alias?: string }): Promise<{ did: string }> {
+    const existing = await this.getIssuerDid()
+    if (existing) {
+      const err = new AppError(409, 'Issuer DID already created for this agent.') as AppError & { did: string }
+      err.did = existing
+      throw err
+    }
+
+    // Generate 32 hex chars of entropy. Treated as the raw private key seed
+    // for the Ed25519 key pair. Never logged or returned.
+    const seed = randomBytes(16).toString('hex')
+
+    const key = await this.agent.wallet.createKey({
+      keyType: KeyType.Ed25519,
+      privateKey: TypedArrayEncoder.fromString(seed),
+    })
+
+    const verkey = TypedArrayEncoder.toBase58(key.publicKey)
+    const unqualifiedDid = unqualifiedDidFromVerkey(verkey)
+    const alias = params.alias ?? 'university-identity-agent'
+
+    let bcovrinRes: Response
+    try {
+      bcovrinRes = await fetch('http://test.bcovrin.vonx.io/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'ENDORSER', alias, did: unqualifiedDid, verkey }),
+      })
+    } catch {
+      throw new AppError(502, 'Ledger registration service unavailable — BCovrin endpoint unreachable.')
+    }
+
+    if (!bcovrinRes.ok) {
+      const detail = await bcovrinRes.text().catch(() => '<no body>')
+      throw new AppError(502, `BCovrin registration failed (${bcovrinRes.status}): ${detail}`)
+    }
+
+    const qualifiedDid = `did:indy:bcovrin:test:${unqualifiedDid}`
+
+    await this.agent.dids.import({
+      did: qualifiedDid,
+      overwrite: false,
+      privateKeys: [
+        {
+          keyType: KeyType.Ed25519,
+          privateKey: TypedArrayEncoder.fromString(seed),
+        },
+      ],
+    })
+
+    return { did: qualifiedDid }
   }
+}
+
+/**
+ * Derive the Indy unqualified DID from a base58-encoded verkey.
+ * Algorithm: base58( SHA-256(verkeyBytes)[0..15] )
+ */
+function unqualifiedDidFromVerkey(verkey: string): string {
+  const verkeyBytes = TypedArrayEncoder.fromBase58(verkey)
+  const hash = Hasher.hash(verkeyBytes, 'sha-256')
+  return TypedArrayEncoder.toBase58(new Uint8Array(hash.buffer, hash.byteOffset, 16))
 }
