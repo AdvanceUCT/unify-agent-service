@@ -1,0 +1,40 @@
+{
+  "name": "unify-credo-agent-service",
+  "version": "0.1.0",
+  "description": "Identity Agent Service for the Unify Student Digital Identity System. Wraps Credo-TS to issue, manage, and revoke W3C/AnonCreds verifiable credentials against a Hyperledger Indy ledger.",
+  "private": true,
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@credo-ts/anoncreds": "^0.5.13",
+    "@credo-ts/askar": "^0.5.13",
+    "@credo-ts/core": "^0.5.13",
+    "@credo-ts/indy-vdr": "^0.5.13",
+    "@credo-ts/node": "^0.5.13",
+    "@hyperledger/anoncreds-nodejs": "^0.2.4",
+    "@hyperledger/aries-askar-nodejs": "^0.2.3",
+    "@hyperledger/indy-vdr-nodejs": "^0.2.4",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.23",
+    "@types/node": "^22.10.0",
+    "nodemon": "^3.1.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "@hyperledger/aries-askar-shared": "0.2.3",
+    "@hyperledger/anoncreds-shared": "0.2.4",
+    "@hyperledger/indy-vdr-shared": "0.2.4"
+  }
+}

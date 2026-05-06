@@ -1,0 +1,21 @@
+services:
+  agent:
+    build: .
+    container_name: unify-credo-agent
+    ports:
+      # API consumed by the Admin Portal
+      - "3000:3000"
+      # DIDComm inbound HTTP transport (mediator / wallet ingress)
+      - "3001:3001"
+    env_file:
+      - .env
+    volumes:
+      # Credo's NodeFileSystem writes the encrypted Askar wallet under
+      # `${HOME}/.afj/data` (and cache under `${HOME}/.afj/cache`). For the
+      # unprivileged `node` user this resolves to /home/node/.afj. Mounting
+      # the whole .afj directory keeps wallet state across container rebuilds.
+      - agent-data:/home/node/.afj
+    restart: unless-stopped
+
+volumes:
+  agent-data:

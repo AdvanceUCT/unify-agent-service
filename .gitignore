@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.wallet
+*.tgz
+*.log
+docs-local/
