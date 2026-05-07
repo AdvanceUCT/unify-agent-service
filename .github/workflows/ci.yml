@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+
+jobs:
+  lint-type-test:
+    name: ci-lint-type-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect Node project
+        id: node
+        shell: bash
+        run: |
+          if [ -f package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json yet. CI scaffold is ready for the application stack."
+          fi
+
+      - name: Set up Node.js
+        if: steps.node.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        if: steps.node.outputs.present == 'true'
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Lint
+        if: steps.node.outputs.present == 'true'
+        shell: bash
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.lint ? 0 : 1)"; then
+            npm run lint
+          else
+            echo "No lint script configured."
+          fi
+
+      - name: Typecheck
+        if: steps.node.outputs.present == 'true'
+        shell: bash
+        run: |
+          if node -e "const s=require('./package.json').scripts||{}; process.exit((s.typecheck || s['type-check']) ? 0 : 1)"; then
+            npm run typecheck --if-present
+            npm run type-check --if-present
+          else
+            echo "No typecheck script configured."
+          fi
+
+      - name: Test
+        if: steps.node.outputs.present == 'true'
+        shell: bash
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
+            npm test
+          else
+            echo "No test script configured."
+          fi
+
+  sensitive-review:
+    name: security-sensitive-review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require two approvals for sensitive changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if [ -z "$PR_NUMBER" ]; then
+            echo "Not a pull request. Nothing to enforce."
+            exit 0
+          fi
+
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename' > changed-files.txt
+
+          if ! grep -Eq '(^|/)(wallet|issuer|verifier|credential|credentials|auth|security|secrets?)(/|$)|^SECURITY\.md$|^\.github/CODEOWNERS$|^\.github/workflows/' changed-files.txt; then
+            echo "No security-sensitive files changed."
+            exit 0
+          fi
+
+          approvals=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/reviews" --jq '[.[] | select(.state == "APPROVED") | .user.login] | unique | length')
+
+          if [ "$approvals" -lt 2 ]; then
+            echo "::error::Security-sensitive changes require at least two approving reviews. Current approvals: $approvals."
+            exit 1
+          fi
+
+          echo "Security-sensitive review requirement met with $approvals approvals."
