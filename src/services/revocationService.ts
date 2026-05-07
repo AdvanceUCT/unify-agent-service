@@ -33,6 +33,13 @@ export class RevocationService {
    *        revocationRegistryDefinitionId, revokedCredentialIndexes: [...]
    *      })`
    *   3. Return the new status-list timestamp / revocation reference
+   *
+   * Done means:
+   *   - Revoking an issued credential updates the ledger status list.
+   *   - Revoking an unknown exchange returns a useful 404-style error.
+   *   - Revoking a non-revocable credential returns a clear 4xx error.
+   *   - A wallet/proof check after revocation observes the credential as
+   *     revoked, not just "the API returned a timestamp".
    */
   async revoke(_params: { credentialExchangeId: string; reason?: string }): Promise<{ revokedAt: string }> {
     throw new Error('Not implemented: RevocationService.revoke')

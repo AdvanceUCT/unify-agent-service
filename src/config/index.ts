@@ -1,3 +1,6 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
 /**
  * Centralised configuration for the Identity Agent Service.
  *
@@ -27,6 +30,12 @@ function parsePort(name: string, fallback: number): number {
   return parsed
 }
 
+function withoutTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '')
+}
+
+const apiPort = parsePort('API_PORT', 3000)
+
 export const config = {
   agent: {
     /** Human-readable label that surfaces in DIDComm handshakes and logs. */
@@ -46,7 +55,7 @@ export const config = {
   },
   api: {
     /** Port the Express REST API (consumed by the Admin Portal) binds to. */
-    port: parsePort('API_PORT', 3000),
+    port: apiPort,
     /** Shared bearer token expected from the Admin Portal. */
     // TODO(AD-75 hardening):
     // The fallback is for local-only developer convenience. For demos, staging,
@@ -54,6 +63,12 @@ export const config = {
     // the same value in the Admin Portal. If this falls back to
     // `dev-agent-api-key`, auth is wired but not operationally secure.
     key: requireEnv('AGENT_API_KEY', 'dev-agent-api-key'),
+  },
+  tails: {
+    /** Local directory where issuer-created AnonCreds tails files are stored. */
+    directory: requireEnv('TAILS_DIRECTORY', join(homedir(), '.afj', 'tails')),
+    /** Public base URL verifiers/holders can use to download tails files. */
+    baseUrl: withoutTrailingSlash(requireEnv('TAILS_BASE_URL', `http://localhost:${apiPort}/tails`)),
   },
   webhooks: {
     /**

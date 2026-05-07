@@ -75,6 +75,11 @@ export class DidService {
 
     let bcovrinRes: Response
     try {
+      // TODO(production ledger onboarding):
+      // BCovrin's self-service registration endpoint is test-network only.
+      // MainNet-style deployments need an endorsed NYM transaction or another
+      // governed DID onboarding flow; do not reuse this endpoint outside PoC
+      // and demo environments.
       bcovrinRes = await fetch('http://test.bcovrin.vonx.io/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

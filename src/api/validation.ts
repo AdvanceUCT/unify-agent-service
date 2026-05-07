@@ -2,6 +2,20 @@ import { AppError } from '../errors'
 
 export type CredentialAttributeInput = { name: string; value: string }
 
+/**
+ * Small route-local validation helpers.
+ *
+ * These keep the current API strict without introducing a schema library while
+ * the Admin Portal contract is still moving. They deliberately throw AppError
+ * with status 400 so the central error handler can return caller-actionable
+ * JSON instead of a generic 500.
+ *
+ * TODO(contract hardening):
+ * Once the request/response shapes stop changing, consider replacing these
+ * helpers with shared Zod/JSON Schema contracts that both the Admin Portal and
+ * this service import. Until then, keep validation failures explicit and close
+ * to the route that owns the payload.
+ */
 function fail(message: string): never {
   throw new AppError(400, message)
 }
@@ -37,6 +51,16 @@ export function requireBoolean(source: Record<string, unknown>, key: string): bo
   const value = source[key]
   if (typeof value !== 'boolean') {
     fail(`${key} must be a boolean.`)
+  }
+
+  return value
+}
+
+export function optionalBoolean(source: Record<string, unknown>, key: string): boolean | undefined {
+  const value = source[key]
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'boolean') {
+    fail(`${key} must be a boolean when provided.`)
   }
 
   return value

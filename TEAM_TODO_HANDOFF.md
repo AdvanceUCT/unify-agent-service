@@ -4,12 +4,33 @@ This file is intentionally written for both humans and AI agents. It names the
 current blocker chain, where to edit, and how to prove each task is actually
 done. Keep it updated when Jira status changes.
 
+## Code Comment Map
+
+Use this section when deciding where to continue implementation:
+
+- `src/services/didService.ts` documents what is complete for AD-69 and marks
+  the BCovrin self-registration code as PoC-only.
+- `src/services/schemaService.ts` owns AD-70 and the low-level pieces of AD-71:
+  schema, credential-definition, revocation-registry, and status-list writes.
+- `src/services/issuanceSetupService.ts` is the Admin Portal orchestration
+  layer for AD-70/AD-71. Its comments explain partial-success behavior and why
+  retries must not create duplicate ledger objects.
+- `src/agent/tailsFileService.ts` explains how revocation tails files are
+  copied and served today, plus the production storage gap.
+- `src/services/credentialService.ts` owns AD-72 offer creation and AD-73
+  status DTOs. Comments call out that Admin Portal persistence is still
+  required for `externalId`/`email` to `credentialExchangeId` correlation.
+- `src/events/` marks the webhook implementation gap for real-time Admin
+  Portal updates.
+- `src/api/middleware/apiKeyAuth.ts`, `src/config/index.ts`, and
+  `src/api/validation.ts` document AD-75 auth/config/validation hardening.
+
 ## Current Critical Path
 
 1. ~~AD-68: prove the Dockerized Credo service can reach BCovrin Test.~~ **DONE**
 2. ~~AD-69: create and persist the university issuer DID.~~ **DONE**
-3. AD-70: register the credential schema with the issuer DID. ← **current blocker**
-4. AD-71: register the credential definition and revocation registry.
+3. AD-70: register the credential schema with the issuer DID.
+4. AD-71: register the credential definition and revocation registry. ← **current blocker**
 5. AD-72: create credential offer invitations for students.
 6. AD-73: expose reliable per-student credential status to the Admin Portal.
 
@@ -106,18 +127,24 @@ Owner in Jira: Caleb V.
 
 Primary files:
 - `src/api/routes/schemas.ts`
+- `src/api/routes/issuance.ts`
 - `src/services/schemaService.ts`
 - `src/services/revocationService.ts`
+- `src/services/issuanceSetupService.ts`
+- `src/agent/tailsFileService.ts`
 
 Current repo behavior:
 - Credential-definition creation is exposed as its own endpoint.
 - Revocation-registry creation is exposed as its own endpoint.
-- Jira says this should be triggered automatically after schema creation.
+- `POST /api/issuance/setup` creates schema and credential definition in one
+  Admin Portal friendly call, with optional revocation registry setup.
+- Revocation tails files are published from `/tails/:tailsHash`.
 
-Decision needed:
-Either keep the explicit multi-step API and update Jira/Admin Portal expectations,
-or add an orchestration endpoint that creates schema, credential definition, and
-revocation registry in order while reusing the existing service methods.
+Decision resolved:
+Keep the lower-level endpoints for debugging/retry and use
+`POST /api/issuance/setup` as the Admin Portal contract. Revocation is optional
+for the first issuance path, but AD-71 is only complete when the revocation path
+returns a real registry definition and status-list timestamp.
 
 Done means:
 - A real `credentialDefinitionId` is returned.

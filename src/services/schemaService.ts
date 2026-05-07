@@ -93,19 +93,13 @@ export class SchemaService {
    *
    * Set `supportRevocation: true` if a revocation registry will be created.
    *
-   * TODO(AD-71 contract decision):
-   * Jira says credential definition + revocation registry creation should be
-   * "triggered automatically after schema creation". The repo currently
-   * exposes this as separate endpoints:
+   * The repo exposes both low-level setup endpoints and the Admin Portal
+   * orchestration endpoint:
    *   POST /api/schemas
    *   POST /api/credential-definitions
    *   POST /api/credential-definitions/:cdId/revocation-registries
-   *
-   * Before wiring the Admin Portal, decide whether to keep the explicit
-   * multi-step API or add one orchestration endpoint that creates schema,
-   * credential definition, and revocation registry in order. If automation is
-   * required, keep these lower-level methods and add the orchestrator above
-   * them so retry/error handling stays clear.
+   *   POST /api/issuance/setup
+   * Keep this method low-level so retry/error handling stays clear.
    */
   async registerCredentialDefinition(_params: {
     issuerDid: string

@@ -142,9 +142,11 @@ This separation means each layer has one job:
 | GET    | `/api/status`                                             | Agent + ledger status for Admin      |
 | GET    | `/api/dids/issuer`                                        | Get the university's issuer DID      |
 | POST   | `/api/dids/issuer`                                        | Create the issuer DID (one-time)     |
+| POST   | `/api/issuance/setup`                                     | Create schema, cred-def, revocation  |
 | POST   | `/api/schemas`                                            | Anchor a credential schema on Indy   |
 | POST   | `/api/credential-definitions`                             | Anchor a credential definition       |
 | POST   | `/api/credential-definitions/:cdId/revocation-registries` | Set up revocation                    |
+| GET    | `/tails/:tailsHash`                                       | Public tails-file download           |
 | POST   | `/api/connections/invitations`                            | Create an OOB invitation             |
 | GET    | `/api/connections`                                        | List active DIDComm connections      |
 | POST   | `/api/credentials/offers`                                 | Create + email-ready credential offer |
@@ -153,10 +155,9 @@ This separation means each layer has one job:
 | GET    | `/api/credentials/:id`                                    | Get exchange status                  |
 | POST   | `/api/credentials/:id/revoke`                             | Revoke an issued credential          |
 
-All endpoints except `GET /api/health` require `Authorization: Bearer $AGENT_API_KEY`.
-
-Stubs throw `Error('Not implemented: …')` so a `curl` against an unimplemented
-route returns 500 with a clear pointer rather than mysterious silence.
+All `/api` endpoints except `GET /api/health` require
+`Authorization: Bearer $AGENT_API_KEY`. `/tails/:tailsHash` is intentionally
+public so holder/verifier agents can download revocation tails files.
 
 ## Environment variables
 
@@ -172,6 +173,8 @@ which must be replaced with a high-entropy secret in any non-local environment.
 | `AGENT_PORT`         | Port the inbound HTTP DIDComm transport binds to                         |
 | `API_PORT`           | Port the Express REST API binds to                                       |
 | `AGENT_API_KEY`      | Bearer token required for Admin Portal REST API calls except health      |
+| `TAILS_BASE_URL`     | Public base URL used in revocation registry tails locations              |
+| `TAILS_DIRECTORY`    | Local persisted directory for generated tails files                      |
 | `WEBHOOK_URL`        | (optional) Admin Portal endpoint to receive state-change events          |
 
 ## What's implemented vs. what's left
@@ -186,6 +189,10 @@ Implemented as part of the scaffold:
   and centralised error handling
 - API key authentication for Admin Portal endpoints, with public health checks
 - Agent status endpoint with a lightweight Indy VDR ledger probe
+- Issuer DID creation + lookup on BCovrin Test with wallet persistence
+- One-call issuance setup endpoint for schema, credential definition, and
+  optional revocation registry setup
+- Local tails-file publishing under `/tails/:tailsHash` for revocation registries
 - Schema, credential-definition, revocation-registry, OOB invitation, and
   credential-offer service methods wired to Credo
 - Batch credential-offer generation that returns email-ready deep links for
@@ -197,7 +204,6 @@ Implemented as part of the scaffold:
 - Docker-only dev workflow with persistent wallet volume
 
 To be implemented by the team:
-- Issuer DID creation + lookup (`DidService`)
 - Credential revocation (`RevocationService`)
 - Webhook dispatch to the Admin Portal (`events/connectionEvents.ts`,
   `events/credentialEvents.ts`)

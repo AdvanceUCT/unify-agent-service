@@ -25,6 +25,11 @@ import {
  *   POST /api/credential-definitions/:cdId/revocation-registries
  *     body: { issuerDid, tag, maximumCredentialNumber }
  *     -> { revocationRegistryDefinitionId }
+ *
+ * These are intentionally low-level escape hatches. The Admin Portal should
+ * normally call `POST /api/issuance/setup`, but teammates should use these
+ * routes when proving or retrying one specific ledger operation during AD-70
+ * and AD-71.
  */
 export function buildSchemasRouter(agent: UniversityAgent): Router {
   const router = Router()
