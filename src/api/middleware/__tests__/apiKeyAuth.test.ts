@@ -30,6 +30,17 @@ describe('apiKeyAuth', () => {
     expect(res.status).not.toHaveBeenCalled()
   })
 
+  it('allows student wallet activation without the admin API token', () => {
+    const req = makeRequest('/wallet/activation/resolve')
+    const res = makeResponse()
+    const next = jest.fn()
+
+    apiKeyAuth(req as never, res as never, next)
+
+    expect(next).toHaveBeenCalled()
+    expect(res.status).not.toHaveBeenCalled()
+  })
+
   it('rejects protected routes with a missing token', () => {
     const req = makeRequest('/status')
     const res = makeResponse()

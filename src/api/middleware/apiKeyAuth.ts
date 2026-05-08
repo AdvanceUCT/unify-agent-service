@@ -4,7 +4,7 @@ import type { RequestHandler } from 'express'
 import { config } from '../../config'
 
 function isPublicPath(path: string): boolean {
-  return path === '/health' || path.startsWith('/health/')
+  return path === '/health' || path.startsWith('/health/') || path.startsWith('/wallet/activation/')
 }
 
 function extractBearerToken(header: string | undefined): string | null {
@@ -26,9 +26,9 @@ function safeEqual(left: string, right: string): boolean {
 }
 
 export const apiKeyAuth: RequestHandler = (req, res, next) => {
-  // `/api/health` stays public so Docker, deploy checks, and human operators
-  // can tell whether the process is alive without knowing the Admin Portal
-  // shared secret. Every other `/api/*` route is protected by the bearer token.
+  // `/api/health` stays public for deploy checks. `/api/wallet/activation/*`
+  // stays public because the student wallet cannot hold the Admin Portal
+  // shared secret; the activation token is the student-facing bearer secret.
   if (isPublicPath(req.path)) {
     next()
     return

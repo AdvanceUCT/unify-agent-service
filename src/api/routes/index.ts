@@ -9,6 +9,7 @@ import { buildHealthRouter } from './health'
 import { buildIssuanceRouter } from './issuance'
 import { buildSchemasRouter } from './schemas'
 import { buildStatusRouter } from './status'
+import { buildWalletActivationRouter } from './walletActivation'
 
 /**
  * Mount every sub-router under a single root.
@@ -25,6 +26,7 @@ export function buildApiRouter(agent: UniversityAgent): Router {
   router.use('/', buildSchemasRouter(agent))
   router.use('/connections', buildConnectionsRouter(agent))
   router.use('/credentials', buildCredentialsRouter(agent))
+  router.use('/wallet/activation', buildWalletActivationRouter(agent))
 
   return router
 }

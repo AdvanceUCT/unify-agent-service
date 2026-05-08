@@ -78,6 +78,17 @@ export const config = {
      */
     url: process.env.WEBHOOK_URL || undefined,
   },
+  demoIssuance: {
+    /**
+     * Credential definition used by the wallet activation endpoint until the
+     * Admin Portal persists and supplies setup state directly.
+     */
+    credentialDefinitionId: process.env.DEMO_CREDENTIAL_DEFINITION_ID || undefined,
+    issuerLabel: process.env.DEMO_ISSUER_LABEL || 'UNIFY Issuer Service',
+    ledgerName: process.env.DEMO_LEDGER_NAME || 'BCovrin Test',
+    studentId: process.env.DEMO_STUDENT_ID || 'student-demo-001',
+    walletId: process.env.DEMO_WALLET_ID || 'wallet-demo-001',
+  },
 } as const
 
 export type AppConfig = typeof config
