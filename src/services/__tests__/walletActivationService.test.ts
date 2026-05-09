@@ -1,84 +1,109 @@
-import { config } from '../../config'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { AppError } from '../../errors'
+import { ActivationStore, hashActivationToken, type StoredActivationRecord } from '../activationStore'
 import { WalletActivationService } from '../walletActivationService'
 
-function makeAgent() {
+const now = new Date('2027-04-27T10:00:00Z')
+
+async function makeStore() {
+  const dir = await mkdtemp(join(tmpdir(), 'unify-activation-store-'))
+  const store = new ActivationStore(join(dir, 'activations.json'))
+
   return {
-    credentials: {
-      createOffer: jest.fn().mockResolvedValue({
-        credentialRecord: { id: 'credential-exchange-001' },
-        message: { '@id': 'offer-message-001' },
-      }),
-    },
-    oob: {
-      createInvitation: jest.fn().mockResolvedValue({
-        outOfBandInvitation: {
-          toUrl: jest.fn(() => 'https://issuer.example.test/oob?oob=encoded-invitation'),
-        },
-      }),
-    },
+    dir,
+    store,
   }
 }
 
-function setDemoCredentialDefinitionId(value: string | undefined) {
-  ;(config.demoIssuance as { credentialDefinitionId?: string }).credentialDefinitionId = value
+function storedActivation(overrides: Partial<StoredActivationRecord> = {}): StoredActivationRecord {
+  return {
+    activationId: 'activation-001',
+    createdAt: now.toISOString(),
+    credentialExchangeId: 'credential-exchange-001',
+    expiresAt: '2027-04-28T10:00:00.000Z',
+    invitationId: 'unify-oob-001',
+    invitationUrl: 'https://issuer.example.test/oob?oob=encoded-invitation',
+    issuerLabel: 'UNIFY Issuer Service',
+    ledgerName: 'BCovrin Test',
+    studentId: 'student-demo-100',
+    tokenHash: hashActivationToken('real-token'),
+    walletId: 'wallet-demo-100',
+    ...overrides,
+  }
 }
 
 describe('WalletActivationService', () => {
-  const originalCredentialDefinitionId = config.demoIssuance.credentialDefinitionId
+  let tempDir: string | undefined
 
-  afterEach(() => {
-    setDemoCredentialDefinitionId(originalCredentialDefinitionId)
-    jest.clearAllMocks()
+  afterEach(async () => {
+    if (tempDir) {
+      await rm(tempDir, { force: true, recursive: true })
+    }
+    tempDir = undefined
   })
 
-  it('creates a real credential offer invitation for an activation token', async () => {
-    setDemoCredentialDefinitionId('cred-def-id')
-    const agent = makeAgent()
-    const service = new WalletActivationService(agent as never)
+  it('resolves a stored activation token and completes it', async () => {
+    const { dir, store } = await makeStore()
+    tempDir = dir
+    await store.save(storedActivation())
+    const service = new WalletActivationService({} as never, store)
 
-    const resolved = await service.resolve({ token: 'demo-token' })
-
-    expect(resolved).toMatchObject({
+    await expect(service.resolve({ token: 'real-token' })).resolves.toMatchObject({
+      activationId: 'activation-001',
       activationSource: 'token',
       credentialExchangeId: 'credential-exchange-001',
       invitationUrl: 'https://issuer.example.test/oob?oob=encoded-invitation',
-      issuerLabel: 'UNIFY Issuer Service',
-      ledgerName: 'BCovrin Test',
-      studentId: 'student-demo-001',
-      walletId: 'wallet-demo-001',
+      studentId: 'student-demo-100',
+      walletId: 'wallet-demo-100',
     })
-    expect(agent.credentials.createOffer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        credentialFormats: {
-          anoncreds: expect.objectContaining({
-            credentialDefinitionId: 'cred-def-id',
-          }),
-        },
-      }),
-    )
 
     await expect(
       service.complete({
-        activationId: resolved.activationId,
+        activationId: 'activation-001',
         credentialRecordId: 'holder-credential-record-001',
         holderConnectionId: 'holder-connection-001',
       }),
     ).resolves.toMatchObject({
-      activationId: resolved.activationId,
+      activationId: 'activation-001',
       credentialExchangeId: 'credential-exchange-001',
       credentialRecordId: 'holder-credential-record-001',
       holderConnectionId: 'holder-connection-001',
     })
   })
 
-  it('requires a configured credential definition before resolving activations', async () => {
-    setDemoCredentialDefinitionId(undefined)
-    const service = new WalletActivationService(makeAgent() as never)
+  it('rejects unknown, expired, and completed tokens', async () => {
+    const { dir, store } = await makeStore()
+    tempDir = dir
+    await store.save(
+      storedActivation({
+        activationId: 'expired',
+        expiresAt: '2026-04-27T09:00:00.000Z',
+        tokenHash: hashActivationToken('expired-token'),
+      }),
+    )
+    await store.save(
+      storedActivation({
+        activationId: 'completed',
+        completedAt: '2027-04-27T10:05:00.000Z',
+        credentialRecordId: 'credential-record-001',
+        holderConnectionId: 'connection-001',
+        tokenHash: hashActivationToken('completed-token'),
+      }),
+    )
+    const service = new WalletActivationService({} as never, store)
 
-    const error = await service.resolve({ token: 'demo-token' }).catch((err) => err)
+    const unknown = await service.resolve({ token: 'missing-token' }).catch((error) => error)
+    const expired = await service.resolve({ token: 'expired-token' }).catch((error) => error)
+    const completed = await service.resolve({ token: 'completed-token' }).catch((error) => error)
 
-    expect(error).toBeInstanceOf(AppError)
-    expect((error as AppError).status).toBe(503)
+    expect(unknown).toBeInstanceOf(AppError)
+    expect((unknown as AppError).status).toBe(404)
+    expect(expired).toBeInstanceOf(AppError)
+    expect((expired as AppError).status).toBe(410)
+    expect(completed).toBeInstanceOf(AppError)
+    expect((completed as AppError).status).toBe(409)
   })
 })

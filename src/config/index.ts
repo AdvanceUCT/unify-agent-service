@@ -30,6 +30,17 @@ function parsePort(name: string, fallback: number): number {
   return parsed
 }
 
+function parsePositiveInteger(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = Number.parseInt(raw, 10)
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    throw new Error(`Environment variable ${name} must be a positive integer (got "${raw}")`)
+  }
+
+  return parsed
+}
+
 function withoutTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
 }
@@ -77,6 +88,18 @@ export const config = {
      * `src/events/` for the dispatch logic.
      */
     url: process.env.WEBHOOK_URL || undefined,
+  },
+  activations: {
+    /** Where tokenized wallet activation records are persisted. */
+    storeFile: requireEnv('ACTIVATION_STORE_FILE', join(homedir(), '.afj', 'activation-links.json')),
+    /** Student-facing deep-link route used by the Admin Portal email. */
+    walletActivationRoute: requireEnv('WALLET_ACTIVATION_ROUTE', 'unifywallet://activate'),
+    /** How long tokenized credential links remain usable. */
+    tokenTtlHours: parsePositiveInteger('ACTIVATION_TOKEN_TTL_HOURS', 24),
+    issuerLabel: process.env.ACTIVATION_ISSUER_LABEL || 'UNIFY Issuer Service',
+    ledgerName: process.env.ACTIVATION_LEDGER_NAME || 'BCovrin Test',
+    /** Optional future Pickup2 / mediator invitation. Leave unset for current MVP smoke tests. */
+    mediatorInvitationUrl: process.env.MEDIATOR_INVITATION_URL || undefined,
   },
   demoIssuance: {
     /**

@@ -151,6 +151,7 @@ This separation means each layer has one job:
 | GET    | `/api/connections`                                        | List active DIDComm connections      |
 | POST   | `/api/credentials/offers`                                 | Create + email-ready credential offer |
 | POST   | `/api/credentials/offers/batch`                           | Create email-ready offers in bulk    |
+| POST   | `/api/credentials/activation-links/batch`                 | Create tokenized wallet activation links |
 | GET    | `/api/credentials`                                        | List credential exchanges            |
 | GET    | `/api/credentials/:id`                                    | Get exchange status                  |
 | POST   | `/api/credentials/:id/revoke`                             | Revoke an issued credential          |
