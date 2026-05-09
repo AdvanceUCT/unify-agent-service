@@ -24,7 +24,7 @@ COPY package.json package-lock.json* ./
 # fall back to `npm install` which will produce one on first build.
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.test.json ./
 COPY src ./src
 COPY genesis ./genesis
 

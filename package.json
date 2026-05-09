@@ -17,10 +17,17 @@
     "test:watch": "jest --watch"
   },
   "jest": {
-    "preset": "ts-jest",
     "testEnvironment": "node",
     "testMatch": ["**/__tests__/**/*.test.ts"],
-    "moduleFileExtensions": ["ts", "js", "json"]
+    "moduleFileExtensions": ["ts", "js", "json"],
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
+    }
   },
   "dependencies": {
     "@credo-ts/anoncreds": "^0.5.13",
