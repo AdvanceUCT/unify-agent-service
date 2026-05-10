@@ -97,9 +97,6 @@ export const config = {
     /** How long tokenized credential links remain usable. */
     tokenTtlHours: parsePositiveInteger('ACTIVATION_TOKEN_TTL_HOURS', 24),
     issuerLabel: process.env.ACTIVATION_ISSUER_LABEL || 'UNIFY Issuer Service',
-    ledgerName: process.env.ACTIVATION_LEDGER_NAME || 'BCovrin Test',
-    /** Optional future Pickup2 / mediator invitation. Leave unset for current MVP smoke tests. */
-    mediatorInvitationUrl: process.env.MEDIATOR_INVITATION_URL || undefined,
   },
   demoIssuance: {
     /**
@@ -109,8 +106,6 @@ export const config = {
     credentialDefinitionId: process.env.DEMO_CREDENTIAL_DEFINITION_ID || undefined,
     issuerLabel: process.env.DEMO_ISSUER_LABEL || 'UNIFY Issuer Service',
     ledgerName: process.env.DEMO_LEDGER_NAME || 'BCovrin Test',
-    studentId: process.env.DEMO_STUDENT_ID || 'student-demo-001',
-    walletId: process.env.DEMO_WALLET_ID || 'wallet-demo-001',
   },
 } as const
 

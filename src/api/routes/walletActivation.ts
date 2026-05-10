@@ -8,9 +8,15 @@ import { optionalString, requireObject } from '../validation'
 /**
  * Student wallet activation bridge.
  *
- * These endpoints are called by the mobile wallet after a student opens an
- * activation deep link. They intentionally do not require the Admin Portal API
- * key because the activation token is the student-facing bearer secret.
+ *   POST /api/wallet/activation/resolve
+ *     body: { token, sourceUrl? }
+ *     -> { activationId, activationSource, createdAt, credentialExchangeId,
+ *          expiresAt, invitationId, invitationUrl, issuerLabel }
+ *
+ * The /resolve endpoint is intentionally unauthenticated by API key — the
+ * activation token is the student-facing bearer secret. Issuance terminal
+ * state is observed via Credo `CredentialStateChanged` events; the wallet
+ * does not call back to mark activation complete.
  */
 export function buildWalletActivationRouter(agent: UniversityAgent): Router {
   const router = Router()
@@ -26,20 +32,6 @@ export function buildWalletActivationRouter(agent: UniversityAgent): Router {
       })
 
       res.status(201).json(result)
-    }),
-  )
-
-  router.post(
-    '/complete',
-    asyncHandler(async (req, res) => {
-      const body = requireObject(req.body)
-      const result = await activations.complete({
-        activationId: optionalString(body, 'activationId'),
-        credentialRecordId: optionalString(body, 'credentialRecordId'),
-        holderConnectionId: optionalString(body, 'holderConnectionId'),
-      })
-
-      res.json(result)
     }),
   )
 

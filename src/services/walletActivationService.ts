@@ -12,18 +12,6 @@ export type ResolvedWalletActivation = {
   invitationId: string
   invitationUrl: string
   issuerLabel: string
-  ledgerName: string
-  mediatorInvitationUrl?: string
-  studentId: string
-  walletId: string
-}
-
-export type CompletedWalletActivation = {
-  activationId: string
-  completedAt: string
-  credentialExchangeId: string
-  credentialRecordId: string
-  holderConnectionId: string
 }
 
 function isExpired(expiresAt: string, now = new Date()) {
@@ -53,10 +41,6 @@ export class WalletActivationService {
       throw new AppError(410, 'Activation token has expired.')
     }
 
-    if (activation.completedAt) {
-      throw new AppError(409, 'Activation token has already been completed.')
-    }
-
     return {
       activationId: activation.activationId,
       activationSource: 'token',
@@ -66,62 +50,6 @@ export class WalletActivationService {
       invitationId: activation.invitationId,
       invitationUrl: activation.invitationUrl,
       issuerLabel: activation.issuerLabel,
-      ledgerName: activation.ledgerName,
-      mediatorInvitationUrl: activation.mediatorInvitationUrl,
-      studentId: activation.studentId,
-      walletId: activation.walletId,
-    }
-  }
-
-  async complete(params: {
-    activationId?: string
-    credentialRecordId?: string
-    holderConnectionId?: string
-  }): Promise<CompletedWalletActivation> {
-    if (!params.activationId) {
-      throw new AppError(400, 'activationId is required.')
-    }
-
-    const activation = await this.store.findByActivationId(params.activationId)
-
-    if (!activation) {
-      throw new AppError(404, 'Activation was not found or has expired.')
-    }
-
-    if (isExpired(activation.expiresAt)) {
-      throw new AppError(410, 'Activation token has expired.')
-    }
-
-    if (!params.credentialRecordId || !params.holderConnectionId) {
-      throw new AppError(400, 'credentialRecordId and holderConnectionId are required.')
-    }
-
-    if (activation.completedAt && activation.credentialRecordId && activation.holderConnectionId) {
-      return {
-        activationId: activation.activationId,
-        completedAt: activation.completedAt,
-        credentialExchangeId: activation.credentialExchangeId,
-        credentialRecordId: activation.credentialRecordId,
-        holderConnectionId: activation.holderConnectionId,
-      }
-    }
-
-    const completedAt = new Date().toISOString()
-    const completedActivation = {
-      ...activation,
-      completedAt,
-      credentialRecordId: params.credentialRecordId,
-      holderConnectionId: params.holderConnectionId,
-    }
-
-    await this.store.save(completedActivation)
-
-    return {
-      activationId: activation.activationId,
-      completedAt,
-      credentialExchangeId: activation.credentialExchangeId,
-      credentialRecordId: params.credentialRecordId,
-      holderConnectionId: params.holderConnectionId,
     }
   }
 }

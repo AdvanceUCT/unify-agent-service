@@ -64,7 +64,6 @@ describe('ActivationLinkService', () => {
       credentialExchangeId: 'credential-exchange-001',
       email: 'caleb.voskuil@gmail.com',
       externalId: 'student-demo-100',
-      studentId: 'student-demo-100',
     })
     expect(result.offers[0].activationUrl).toMatch(/^unifywallet:\/\/activate\?token=/)
     expect(agent.credentials.createOffer).toHaveBeenCalledWith(
@@ -86,7 +85,6 @@ describe('ActivationLinkService', () => {
     await expect(walletActivation.resolve({ token: token ?? '' })).resolves.toMatchObject({
       credentialExchangeId: 'credential-exchange-001',
       invitationUrl: 'https://issuer.example.test/oob?oob=encoded-invitation',
-      studentId: 'student-demo-100',
     })
   })
 })

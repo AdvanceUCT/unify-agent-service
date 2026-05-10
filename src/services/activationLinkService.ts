@@ -16,7 +16,6 @@ type StudentActivationInput = {
   attributes: Array<{ name: string; value: string }>
   email?: string
   externalId?: string
-  walletId?: string
 }
 
 export type BatchActivationLinkResult = {
@@ -28,8 +27,6 @@ export type BatchActivationLinkResult = {
     email?: string
     expiresAt: string
     externalId?: string
-    studentId: string
-    walletId: string
   }>
 }
 
@@ -55,14 +52,6 @@ function expiresAtFrom(createdAt: Date): string {
   const expiresAt = new Date(createdAt)
   expiresAt.setHours(expiresAt.getHours() + config.activations.tokenTtlHours)
   return expiresAt.toISOString()
-}
-
-function studentIdFor(student: StudentActivationInput, activationId: string) {
-  return student.externalId ?? student.email ?? activationId
-}
-
-function walletIdFor(student: StudentActivationInput, studentId: string) {
-  return student.walletId ?? `wallet-${suffixFor(studentId)}`
 }
 
 export class ActivationLinkService {
@@ -108,8 +97,6 @@ export class ActivationLinkService {
     const token = generateActivationToken()
     const activationId = generateActivationId()
     const createdAt = new Date()
-    const studentId = studentIdFor(params.student, activationId)
-    const walletId = walletIdFor(params.student, studentId)
     const offer = await this.credentials.createOfferInvitation({
       attributes: params.student.attributes,
       credentialDefinitionId: params.credentialDefinitionId,
@@ -120,17 +107,11 @@ export class ActivationLinkService {
       activationId,
       createdAt: createdAt.toISOString(),
       credentialExchangeId: offer.credentialExchangeId,
-      email: params.student.email,
       expiresAt,
-      externalId: params.student.externalId,
       invitationId,
       invitationUrl: offer.invitationUrl,
       issuerLabel: config.activations.issuerLabel,
-      ledgerName: config.activations.ledgerName,
-      mediatorInvitationUrl: config.activations.mediatorInvitationUrl,
-      studentId,
       tokenHash: hashActivationToken(token),
-      walletId,
     }
 
     await this.store.save(record)
@@ -142,8 +123,6 @@ export class ActivationLinkService {
       email: params.student.email,
       expiresAt,
       externalId: params.student.externalId,
-      studentId,
-      walletId,
     }
   }
 }

@@ -27,10 +27,7 @@ function storedActivation(overrides: Partial<StoredActivationRecord> = {}): Stor
     invitationId: 'unify-oob-001',
     invitationUrl: 'https://issuer.example.test/oob?oob=encoded-invitation',
     issuerLabel: 'UNIFY Issuer Service',
-    ledgerName: 'BCovrin Test',
-    studentId: 'student-demo-100',
     tokenHash: hashActivationToken('real-token'),
-    walletId: 'wallet-demo-100',
     ...overrides,
   }
 }
@@ -45,7 +42,7 @@ describe('WalletActivationService', () => {
     tempDir = undefined
   })
 
-  it('resolves a stored activation token and completes it', async () => {
+  it('resolves a stored activation token', async () => {
     const { dir, store } = await makeStore()
     tempDir = dir
     await store.save(storedActivation())
@@ -55,26 +52,13 @@ describe('WalletActivationService', () => {
       activationId: 'activation-001',
       activationSource: 'token',
       credentialExchangeId: 'credential-exchange-001',
+      expiresAt: '2027-04-28T10:00:00.000Z',
       invitationUrl: 'https://issuer.example.test/oob?oob=encoded-invitation',
-      studentId: 'student-demo-100',
-      walletId: 'wallet-demo-100',
-    })
-
-    await expect(
-      service.complete({
-        activationId: 'activation-001',
-        credentialRecordId: 'holder-credential-record-001',
-        holderConnectionId: 'holder-connection-001',
-      }),
-    ).resolves.toMatchObject({
-      activationId: 'activation-001',
-      credentialExchangeId: 'credential-exchange-001',
-      credentialRecordId: 'holder-credential-record-001',
-      holderConnectionId: 'holder-connection-001',
+      issuerLabel: 'UNIFY Issuer Service',
     })
   })
 
-  it('rejects unknown, expired, and completed tokens', async () => {
+  it('rejects unknown and expired tokens', async () => {
     const { dir, store } = await makeStore()
     tempDir = dir
     await store.save(
@@ -84,26 +68,14 @@ describe('WalletActivationService', () => {
         tokenHash: hashActivationToken('expired-token'),
       }),
     )
-    await store.save(
-      storedActivation({
-        activationId: 'completed',
-        completedAt: '2027-04-27T10:05:00.000Z',
-        credentialRecordId: 'credential-record-001',
-        holderConnectionId: 'connection-001',
-        tokenHash: hashActivationToken('completed-token'),
-      }),
-    )
     const service = new WalletActivationService({} as never, store)
 
     const unknown = await service.resolve({ token: 'missing-token' }).catch((error) => error)
     const expired = await service.resolve({ token: 'expired-token' }).catch((error) => error)
-    const completed = await service.resolve({ token: 'completed-token' }).catch((error) => error)
 
     expect(unknown).toBeInstanceOf(AppError)
     expect((unknown as AppError).status).toBe(404)
     expect(expired).toBeInstanceOf(AppError)
     expect((expired as AppError).status).toBe(410)
-    expect(completed).toBeInstanceOf(AppError)
-    expect((completed as AppError).status).toBe(409)
   })
 })

@@ -87,7 +87,6 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
           return {
             externalId: optionalString(value, 'externalId'),
             email: optionalString(value, 'email'),
-            walletId: optionalString(value, 'walletId'),
             attributes: requireAttributes(value),
           }
         }),

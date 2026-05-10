@@ -6,22 +6,13 @@ import { config } from '../config'
 
 export type StoredActivationRecord = {
   activationId: string
-  completedAt?: string
   createdAt: string
   credentialExchangeId: string
-  credentialRecordId?: string
-  email?: string
   expiresAt: string
-  externalId?: string
-  holderConnectionId?: string
   invitationId: string
   invitationUrl: string
   issuerLabel: string
-  ledgerName: string
-  mediatorInvitationUrl?: string
-  studentId: string
   tokenHash: string
-  walletId: string
 }
 
 type ActivationStoreFile = {
@@ -60,11 +51,6 @@ export class ActivationStore {
     const tokenHash = hashActivationToken(token)
     const activations = await this.readAll()
     return activations.find((activation) => activation.tokenHash === tokenHash)
-  }
-
-  async findByActivationId(activationId: string): Promise<StoredActivationRecord | undefined> {
-    const activations = await this.readAll()
-    return activations.find((activation) => activation.activationId === activationId)
   }
 
   async clear(): Promise<void> {
