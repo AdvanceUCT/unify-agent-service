@@ -24,8 +24,12 @@ COPY package.json package-lock.json* ./
 # fall back to `npm install` which will produce one on first build.
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.test.json ./
 COPY src ./src
+COPY genesis ./genesis
+
+RUN npm test
+
 RUN npm run build
 
 # ----------- runner stage -----------
@@ -40,6 +44,7 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/genesis ./genesis
 
 # Credo writes the encrypted Askar wallet + cache under ${HOME}/.afj. For the
 # unprivileged `node` user that ships with the official Node images this

@@ -2,13 +2,19 @@ import { Router } from 'express'
 
 import { DidService } from '../../services/didService'
 import type { UniversityAgent } from '../../agent'
+import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
+import { optionalString, requireObject } from '../validation'
 
 /**
  * Issuer DID endpoints.
  *
- *   GET  /api/dids/issuer       returns the university's issuer DID (or 404)
- *   POST /api/dids/issuer       creates the issuer DID (one-time onboarding)
+ *   GET  /api/dids/issuer   → { did }          200  (or 404 if not yet created)
+ *   POST /api/dids/issuer   → { did }          201  (one-time onboarding)
+ *                           → { error, did }   409  (DID already exists)
+ *
+ * POST body: { alias?: string }
+ * The seed is generated server-side and never accepted from the caller.
  */
 export function buildDidsRouter(agent: UniversityAgent): Router {
   const router = Router()
@@ -23,16 +29,28 @@ export function buildDidsRouter(agent: UniversityAgent): Router {
         return
       }
       res.json({ did })
-    })
+    }),
   )
 
   router.post(
     '/issuer',
     asyncHandler(async (req, res) => {
-      // TODO(team): validate req.body { seed: string; endorserDid?: string }
-      const result = await dids.createIssuerDid(req.body)
-      res.status(201).json(result)
-    })
+      const body = requireObject(req.body ?? {})
+      const alias = optionalString(body, 'alias')
+
+      try {
+        const result = await dids.createIssuerDid({ alias })
+        res.status(201).json(result)
+      } catch (err) {
+        if (err instanceof AppError && err.status === 409) {
+          res.status(409).json({
+            error: { message: err.message, did: (err as AppError & { did?: string }).did },
+          })
+          return
+        }
+        throw err
+      }
+    }),
   )
 
   return router

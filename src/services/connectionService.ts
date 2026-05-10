@@ -1,4 +1,5 @@
 import type { UniversityAgent } from '../agent'
+import { config } from '../config'
 
 /**
  * DIDComm connection lifecycle.
@@ -30,23 +31,33 @@ export class ConnectionService {
   /**
    * Create an Out-of-Band invitation and return the deep-link URL.
    *
-   * TODO(team):
-   *   1. Call `agent.oob.createInvitation({ ...handshakeProtocols, ...messages })`
-   *   2. Use `outOfBandInvitation.toUrl({ domain: config.agent.endpoint })`
-   *   3. Return both the invitation URL and the OOB record id (caller
-   *      will correlate this with the eventual connectionId via events)
+   * Returns both the invitation URL and the OOB record id. Callers correlate
+   * the OOB record with the eventual connectionId via events.
    */
   async createInvitation(_params: { label?: string }): Promise<{ invitationUrl: string; outOfBandId: string }> {
-    throw new Error('Not implemented: ConnectionService.createInvitation')
+    const outOfBandRecord = await this.agent.oob.createInvitation({
+      label: _params.label,
+    })
+
+    return {
+      invitationUrl: outOfBandRecord.outOfBandInvitation.toUrl({ domain: config.agent.endpoint }),
+      outOfBandId: outOfBandRecord.id,
+    }
   }
 
   /**
    * List every active DIDComm connection.
    *
-   * TODO(team): call `agent.connections.getAll()` and project to a DTO
-   * shape suitable for the Admin Portal (id, theirLabel, state, createdAt).
+   * Project Credo connection records to the Admin Portal DTO shape.
    */
   async listConnections(): Promise<Array<{ id: string; state: string; theirLabel?: string; createdAt: string }>> {
-    throw new Error('Not implemented: ConnectionService.listConnections')
+    const records = await this.agent.connections.getAll()
+
+    return records.map((record) => ({
+      id: record.id,
+      state: record.state,
+      theirLabel: record.theirLabel,
+      createdAt: record.createdAt.toISOString(),
+    }))
   }
 }

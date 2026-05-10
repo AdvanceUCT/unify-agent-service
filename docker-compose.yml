@@ -4,9 +4,9 @@ services:
     container_name: unify-credo-agent
     ports:
       # API consumed by the Admin Portal
-      - "3000:3000"
+      - "${API_PORT:-3000}:${API_PORT:-3000}"
       # DIDComm inbound HTTP transport (mediator / wallet ingress)
-      - "3001:3001"
+      - "${AGENT_PORT:-3001}:${AGENT_PORT:-3001}"
     env_file:
       - .env
     volumes:

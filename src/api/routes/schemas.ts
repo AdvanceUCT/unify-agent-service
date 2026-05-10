@@ -3,6 +3,13 @@ import { Router } from 'express'
 import { SchemaService } from '../../services/schemaService'
 import type { UniversityAgent } from '../../agent'
 import { asyncHandler } from '../middleware/asyncHandler'
+import {
+  requireBoolean,
+  requireObject,
+  requirePositiveInteger,
+  requireString,
+  requireStringArray,
+} from '../validation'
 
 /**
  * Schema and credential-definition endpoints.
@@ -18,6 +25,11 @@ import { asyncHandler } from '../middleware/asyncHandler'
  *   POST /api/credential-definitions/:cdId/revocation-registries
  *     body: { issuerDid, tag, maximumCredentialNumber }
  *     -> { revocationRegistryDefinitionId }
+ *
+ * These are intentionally low-level escape hatches. The Admin Portal should
+ * normally call `POST /api/issuance/setup`, but teammates should use these
+ * routes when proving or retrying one specific ledger operation during AD-70
+ * and AD-71.
  */
 export function buildSchemasRouter(agent: UniversityAgent): Router {
   const router = Router()
@@ -26,8 +38,13 @@ export function buildSchemasRouter(agent: UniversityAgent): Router {
   router.post(
     '/schemas',
     asyncHandler(async (req, res) => {
-      // TODO(team): validate body
-      const result = await schemas.registerSchema(req.body)
+      const body = requireObject(req.body)
+      const result = await schemas.registerSchema({
+        issuerDid: requireString(body, 'issuerDid'),
+        name: requireString(body, 'name'),
+        version: requireString(body, 'version'),
+        attributes: requireStringArray(body, 'attributes'),
+      })
       res.status(201).json(result)
     })
   )
@@ -35,8 +52,13 @@ export function buildSchemasRouter(agent: UniversityAgent): Router {
   router.post(
     '/credential-definitions',
     asyncHandler(async (req, res) => {
-      // TODO(team): validate body
-      const result = await schemas.registerCredentialDefinition(req.body)
+      const body = requireObject(req.body)
+      const result = await schemas.registerCredentialDefinition({
+        issuerDid: requireString(body, 'issuerDid'),
+        schemaId: requireString(body, 'schemaId'),
+        tag: requireString(body, 'tag'),
+        supportRevocation: requireBoolean(body, 'supportRevocation'),
+      })
       res.status(201).json(result)
     })
   )
@@ -44,10 +66,12 @@ export function buildSchemasRouter(agent: UniversityAgent): Router {
   router.post(
     '/credential-definitions/:cdId/revocation-registries',
     asyncHandler(async (req, res) => {
-      // TODO(team): validate body + use req.params.cdId as credentialDefinitionId
+      const body = requireObject(req.body)
       const result = await schemas.registerRevocationRegistry({
         credentialDefinitionId: req.params.cdId,
-        ...req.body,
+        issuerDid: requireString(body, 'issuerDid'),
+        tag: requireString(body, 'tag'),
+        maximumCredentialNumber: requirePositiveInteger(body, 'maximumCredentialNumber'),
       })
       res.status(201).json(result)
     })

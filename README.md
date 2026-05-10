@@ -139,20 +139,26 @@ This separation means each layer has one job:
 | Method | Path                                                      | Purpose                              |
 | ------ | --------------------------------------------------------- | ------------------------------------ |
 | GET    | `/api/health`                                             | Liveness probe (implemented)         |
+| GET    | `/api/status`                                             | Agent + ledger status for Admin      |
 | GET    | `/api/dids/issuer`                                        | Get the university's issuer DID      |
 | POST   | `/api/dids/issuer`                                        | Create the issuer DID (one-time)     |
+| POST   | `/api/issuance/setup`                                     | Create schema, cred-def, revocation  |
 | POST   | `/api/schemas`                                            | Anchor a credential schema on Indy   |
 | POST   | `/api/credential-definitions`                             | Anchor a credential definition       |
 | POST   | `/api/credential-definitions/:cdId/revocation-registries` | Set up revocation                    |
+| GET    | `/tails/:tailsHash`                                       | Public tails-file download           |
 | POST   | `/api/connections/invitations`                            | Create an OOB invitation             |
 | GET    | `/api/connections`                                        | List active DIDComm connections      |
 | POST   | `/api/credentials/offers`                                 | Create + email-ready credential offer |
+| POST   | `/api/credentials/offers/batch`                           | Create email-ready offers in bulk    |
+| POST   | `/api/credentials/activation-links/batch`                 | Create tokenized wallet activation links |
 | GET    | `/api/credentials`                                        | List credential exchanges            |
 | GET    | `/api/credentials/:id`                                    | Get exchange status                  |
 | POST   | `/api/credentials/:id/revoke`                             | Revoke an issued credential          |
 
-Stubs throw `Error('Not implemented: …')` so a `curl` against an unimplemented
-route returns 500 with a clear pointer rather than mysterious silence.
+All `/api` endpoints except `GET /api/health` require
+`Authorization: Bearer $AGENT_API_KEY`. `/tails/:tailsHash` is intentionally
+public so holder/verifier agents can download revocation tails files.
 
 ## Environment variables
 
@@ -167,6 +173,9 @@ which must be replaced with a high-entropy secret in any non-local environment.
 | `AGENT_ENDPOINT`     | Public DIDComm endpoint advertised in OOB invitations                    |
 | `AGENT_PORT`         | Port the inbound HTTP DIDComm transport binds to                         |
 | `API_PORT`           | Port the Express REST API binds to                                       |
+| `AGENT_API_KEY`      | Bearer token required for Admin Portal REST API calls except health      |
+| `TAILS_BASE_URL`     | Public base URL used in revocation registry tails locations              |
+| `TAILS_DIRECTORY`    | Local persisted directory for generated tails files                      |
 | `WEBHOOK_URL`        | (optional) Admin Portal endpoint to receive state-change events          |
 
 ## What's implemented vs. what's left
@@ -179,21 +188,23 @@ Implemented as part of the scaffold:
 - Inbound HTTP DIDComm transport + outbound HTTP/WS transports
 - Express REST API with route → service → agent layering, request logging,
   and centralised error handling
+- API key authentication for Admin Portal endpoints, with public health checks
+- Agent status endpoint with a lightweight Indy VDR ledger probe
+- Issuer DID creation + lookup on BCovrin Test with wallet persistence
+- One-call issuance setup endpoint for schema, credential definition, and
+  optional revocation registry setup
+- Local tails-file publishing under `/tails/:tailsHash` for revocation registries
+- Schema, credential-definition, revocation-registry, OOB invitation, and
+  credential-offer service methods wired to Credo
+- Batch credential-offer generation that returns email-ready deep links for
+  the Admin Portal to deliver
 - Event listeners for connection + credential state changes (currently log
   to stdout; webhook dispatch is a single TODO marker per file)
 - Graceful shutdown that closes the agent (flushes wallet writes, disconnects
   ledger pool)
 - Docker-only dev workflow with persistent wallet volume
 
-To be implemented by the team (every stub method in `src/services/` and
-every route handler in `src/api/routes/` carries a `TODO(team)` block with
-the specific Credo API call(s) needed):
-- Issuer DID creation + lookup (`DidService`)
-- Schema, credential-definition, and revocation-registry registration (`SchemaService`)
-- OOB invitation creation + connection listing (`ConnectionService`)
-- Credential offer creation, status lookup, and listing (`CredentialService`)
+To be implemented by the team:
 - Credential revocation (`RevocationService`)
 - Webhook dispatch to the Admin Portal (`events/connectionEvents.ts`,
   `events/credentialEvents.ts`)
-- Input validation on routes (currently `// TODO(team): validate body` markers — pick zod, class-validator, or your preferred library)
-- Authentication on the REST API (currently un-gated; the Admin Portal is the only intended consumer)

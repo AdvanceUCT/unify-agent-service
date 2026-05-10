@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
 import type { IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
 
 /**
@@ -8,13 +11,20 @@ import type { IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
  * the client should trust on first contact. They are public information
  * (no secrets) and rarely change.
  *
+ * The genesis transactions are stored in `genesis/bcorvin-test.txn` (one
+ * JSON object per line) so they can be updated without touching TypeScript
+ * source. The Dockerfile copies that directory into both the builder and
+ * runner stages so the file is available at runtime.
+ *
  * Currently configured: BCovrin Test (the standard SSI development ledger).
  * Production target per project context: Sovrin MainNet or Cheqd (the
  * latter requires `@credo-ts/cheqd` and a different registry — see
  * `src/agent/modules.ts` for the AnonCreds registry list).
  */
 
-const BCOVRIN_TEST_GENESIS = `{"reqSignature":{},"txn":{"data":{"data":{"alias":"Node1","blskey":"4N8aUNHSgjQVgkpm8nhNEfDf6txHznoYREg9kirmJrkivgL4oSEimFF6nsQ6M41QvhM2Z33nves5vfSn9n1UwNFJBYtWVnHYMATn76vLuL3zU88KyeAYcHfsih3He6UHcXDx","blskey_pop":"RahHYiCvoNCtPTrVtP7nMC5eTYrsUA8WjXbdhNc8debh1agE9bGiJFh8eLkeMmqq8F7VAmjQkLSdAmd4FDzkC34x6pgGFhGhRXCCCMkCuTHans5hXNBJKyJqGf9fYHJcpEpF6H7Mz9gFAjGKiCKJVghDsHSGj44NVBGFAFzZnJmO","client_ip":"3.217.107.54","client_port":9702,"node_ip":"3.217.107.54","node_port":9701,"services":["VALIDATOR"]},"dest":"Gw6pDLhcBcoQesN72qfotTgFa7cbuqZpkX3Xo6pLhPhv"},"metadata":{"from":"Th7MpTaRZVRYnPiabds81Y"},"type":"0"},"txnMetadata":{"seqNo":1,"txnId":"fea82e10e894419fe2bea7d96296a6d46f50f93f9eeda954ec461b2ed2950b62"},"ver":"1"}`
+// Resolved relative to the compiled output: dist/agent/networks.js → ../../genesis/
+const GENESIS_PATH = join(__dirname, '..', '..', 'genesis', 'bcovrin-test.txn')
+const BCOVRIN_TEST_GENESIS = readFileSync(GENESIS_PATH, 'utf-8')
 
 const bcovrinTest: IndyVdrPoolConfig = {
   indyNamespace: 'bcovrin:test',

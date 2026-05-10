@@ -33,6 +33,9 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     error: {
       message,
       ...(err instanceof CredoError ? { kind: 'CredoError' } : {}),
+      ...((err as { details?: unknown }).details !== undefined
+        ? { details: (err as { details: unknown }).details }
+        : {}),
     },
   })
 }

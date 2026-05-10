@@ -28,7 +28,9 @@ import { ariesAskar } from '@hyperledger/aries-askar-nodejs'
 import { anoncreds } from '@hyperledger/anoncreds-nodejs'
 import { indyVdr } from '@hyperledger/indy-vdr-nodejs'
 
+import { config } from '../config'
 import { indyNetworks } from './networks'
+import { LocalTailsFileService } from './tailsFileService'
 
 /**
  * Build the full set of Credo modules this agent needs.
@@ -64,6 +66,10 @@ export function buildAgentModules() {
     anoncreds: new AnonCredsModule({
       anoncreds,
       registries: [new IndyVdrAnonCredsRegistry()],
+      tailsFileService: new LocalTailsFileService({
+        tailsDirectoryPath: config.tails.directory,
+        tailsBaseUrl: config.tails.baseUrl,
+      }),
     }),
 
     indyVdr: new IndyVdrModule({
