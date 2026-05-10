@@ -5,5 +5,5 @@ dist/
 *.tgz
 *.log
 docs-local/
-.claude
-.vscode
+.claude*
+.vscode*
