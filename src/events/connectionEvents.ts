@@ -4,7 +4,8 @@ import {
 } from '@credo-ts/core'
 
 import type { UniversityAgent } from '../agent'
-import { config } from '../config'
+
+import { dispatchWebhook } from './webhookDispatcher'
 
 /**
  * Subscribe to DIDComm connection state changes.
@@ -26,21 +27,15 @@ export function registerConnectionEventHandlers(agent: UniversityAgent): void {
         `[events] connection ${connectionRecord.id}: ${previousState ?? '∅'} → ${connectionRecord.state}`
       )
 
-      // TODO(team): if config.webhooks.url is set, POST a webhook payload here:
-      //   {
-      //     type: 'connection.stateChanged',
-      //     connectionId: connectionRecord.id,
-      //     state: connectionRecord.state,
-      //     previousState,
-      //     theirLabel: connectionRecord.theirLabel,
-      //     outOfBandId: connectionRecord.outOfBandId,
-      //     timestamp: new Date().toISOString(),
-      //   }
-      // Recommended: include an HMAC signature header so the Admin Portal
-      // can verify the call came from this agent and not a spoofer.
-      if (config.webhooks.url) {
-        // placeholder — implement webhook dispatch here
-      }
+      void dispatchWebhook({
+        connectionId: connectionRecord.id,
+        outOfBandId: connectionRecord.outOfBandId,
+        previousState,
+        state: connectionRecord.state,
+        theirLabel: connectionRecord.theirLabel,
+        timestamp: new Date().toISOString(),
+        type: 'connection.stateChanged',
+      })
     }
   )
 }

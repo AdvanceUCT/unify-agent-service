@@ -88,6 +88,11 @@ export const config = {
      * `src/events/` for the dispatch logic.
      */
     url: process.env.WEBHOOK_URL || undefined,
+    /**
+     * Optional HMAC secret used to sign webhook payloads. When set, webhook
+     * requests include `X-Unify-Signature: sha256=<hex>`.
+     */
+    signingSecret: process.env.WEBHOOK_SIGNING_SECRET || undefined,
   },
   activations: {
     /** Where tokenized wallet activation records are persisted. */
