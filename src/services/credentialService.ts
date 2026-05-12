@@ -56,19 +56,32 @@ export class CredentialService {
    * Do not call this "issuing works" if `credentialDefinitionId` was copied
    * from a stale environment or from another agent wallet.
    */
-  async createOfferInvitation(_params: {
-    credentialDefinitionId: string
-    attributes: Array<{ name: string; value: string }>
-  }): Promise<{ invitationUrl: string; credentialExchangeId: string }> {
-    const { message, credentialRecord } = await this.agent.credentials.createOffer({
-      protocolVersion: 'v2',
-      credentialFormats: {
-        anoncreds: {
-          credentialDefinitionId: _params.credentialDefinitionId,
-          attributes: _params.attributes,
-        },
+async createOfferInvitation(_params: {
+  credentialDefinitionId: string
+  attributes: Array<{ name: string; value: unknown }>
+}): Promise<{ invitationUrl: string; credentialExchangeId: string }> {
+  const attributes = _params.attributes.map((attribute) => ({
+    name: String(attribute.name),
+    value: String(attribute.value ?? ''),
+  }))
+
+  console.log(
+    '[credential-service] issuing attributes',
+    attributes.map((attribute) => ({
+      name: attribute.name,
+      valueType: typeof attribute.value,
+    })),
+  )
+
+  const { message, credentialRecord } = await this.agent.credentials.createOffer({
+    protocolVersion: 'v2',
+    credentialFormats: {
+      anoncreds: {
+        credentialDefinitionId: _params.credentialDefinitionId,
+        attributes,
       },
-    })
+    },
+  })
 
     const outOfBandRecord = await this.agent.oob.createInvitation({
       messages: [message],
