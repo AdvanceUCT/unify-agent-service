@@ -187,13 +187,13 @@ Primary files:
 Current repo behavior:
 - `GET /api/credentials` lists Credo credential exchange records.
 - `GET /api/credentials/:id` returns basic state for one exchange.
-- Credential state changes are logged, but webhook dispatch is still TODO.
+- Credential state changes are logged and optionally dispatched to `WEBHOOK_URL`.
 
 Done means:
 - The Admin Portal can poll by `credentialExchangeId`.
 - Unknown ids return a useful 404-style response.
 - State transitions are documented and mapped to UI-friendly labels.
-- Webhook dispatch is implemented if the Admin Portal needs real-time updates.
+- Admin Portal webhook consumption is implemented if real-time updates are needed.
 - A full wallet acceptance test shows state moving to `done`.
 
 ## AD-75 - API Key Auth

@@ -156,9 +156,11 @@ This separation means each layer has one job:
 | GET    | `/api/credentials/:id`                                    | Get exchange status                  |
 | POST   | `/api/credentials/:id/revoke`                             | Revoke an issued credential          |
 
-All `/api` endpoints except `GET /api/health` require
-`Authorization: Bearer $AGENT_API_KEY`. `/tails/:tailsHash` is intentionally
-public so holder/verifier agents can download revocation tails files.
+All `/api` endpoints except `GET /api/health` and
+`POST /api/wallet/activation/resolve` require
+`Authorization: Bearer $AGENT_API_KEY`. Wallet activation resolve is public
+because the activation token is the student-facing bearer secret. `/tails/:tailsHash`
+is intentionally public so holder/verifier agents can download revocation tails files.
 
 ## Environment variables
 
@@ -177,6 +179,46 @@ which must be replaced with a high-entropy secret in any non-local environment.
 | `TAILS_BASE_URL`     | Public base URL used in revocation registry tails locations              |
 | `TAILS_DIRECTORY`    | Local persisted directory for generated tails files                      |
 | `WEBHOOK_URL`        | (optional) Admin Portal endpoint to receive state-change events          |
+| `WEBHOOK_SIGNING_SECRET` | (optional) HMAC key for `X-Unify-Signature` webhook headers          |
+
+For physical-device wallet tests, `AGENT_ENDPOINT` must be a phone-reachable
+DIDComm URL, `TAILS_BASE_URL` must be phone-reachable if revocation is enabled,
+and the wallet's `EXPO_PUBLIC_UNIFY_AGENT_API_BASE_URL` must point at the
+phone-reachable REST API URL.
+
+## Admin Portal webhooks
+
+When `WEBHOOK_URL` is configured, the service posts issuer-side state changes
+without blocking Credo event processing. Connection events use:
+
+```json
+{
+  "type": "connection.stateChanged",
+  "connectionId": "connection-001",
+  "state": "completed",
+  "previousState": "response-sent",
+  "theirLabel": "UNIFY Student Wallet",
+  "outOfBandId": "oob-001",
+  "timestamp": "2026-05-10T12:00:00.000Z"
+}
+```
+
+Credential events use:
+
+```json
+{
+  "type": "credential.stateChanged",
+  "credentialExchangeId": "credential-exchange-001",
+  "state": "done",
+  "previousState": "credential-issued",
+  "connectionId": "connection-001",
+  "timestamp": "2026-05-10T12:00:00.000Z"
+}
+```
+
+If `WEBHOOK_SIGNING_SECRET` is set, requests include
+`X-Unify-Signature: sha256=<hex-hmac-of-json-body>`. Issuer-side credential
+state `done` is the Admin Portal completion signal for the wallet issuance flow.
 
 ## What's implemented vs. what's left
 
@@ -198,13 +240,11 @@ Implemented as part of the scaffold:
   credential-offer service methods wired to Credo
 - Batch credential-offer generation that returns email-ready deep links for
   the Admin Portal to deliver
-- Event listeners for connection + credential state changes (currently log
-  to stdout; webhook dispatch is a single TODO marker per file)
+- Event listeners for connection + credential state changes, with optional
+  signed webhook dispatch when `WEBHOOK_URL` is configured
 - Graceful shutdown that closes the agent (flushes wallet writes, disconnects
   ledger pool)
 - Docker-only dev workflow with persistent wallet volume
 
 To be implemented by the team:
 - Credential revocation (`RevocationService`)
-- Webhook dispatch to the Admin Portal (`events/connectionEvents.ts`,
-  `events/credentialEvents.ts`)

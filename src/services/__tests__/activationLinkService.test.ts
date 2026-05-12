@@ -7,6 +7,8 @@ import { ActivationStore } from '../activationStore'
 import { WalletActivationService } from '../walletActivationService'
 
 function makeAgent() {
+  const invitationToUrl = jest.fn(() => 'https://issuer.example.test/oob?oob=encoded-invitation')
+
   return {
     credentials: {
       createOffer: jest.fn().mockResolvedValue({
@@ -17,10 +19,11 @@ function makeAgent() {
     oob: {
       createInvitation: jest.fn().mockResolvedValue({
         outOfBandInvitation: {
-          toUrl: jest.fn(() => 'https://issuer.example.test/oob?oob=encoded-invitation'),
+          toUrl: invitationToUrl,
         },
       }),
     },
+    invitationToUrl,
   }
 }
 
@@ -75,6 +78,10 @@ describe('ActivationLinkService', () => {
         },
       }),
     )
+    expect(agent.oob.createInvitation).toHaveBeenCalledWith({
+      messages: [{ '@id': 'offer-message-001' }],
+    })
+    expect(agent.invitationToUrl).toHaveBeenCalledWith({ domain: 'http://localhost:3001' })
 
     const token = new URL(result.offers[0].activationUrl).searchParams.get('token')
     expect(token).toBeTruthy()
