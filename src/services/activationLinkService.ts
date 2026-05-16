@@ -24,6 +24,7 @@ export type BatchActivationLinkResult = {
     activationId: string
     activationUrl: string
     credentialExchangeId: string
+    outOfBandId: string
     email?: string
     expiresAt: string
     externalId?: string
@@ -120,6 +121,7 @@ export class ActivationLinkService {
       activationId,
       activationUrl: activationUrlForToken(token),
       credentialExchangeId: offer.credentialExchangeId,
+      outOfBandId: offer.outOfBandId,
       email: params.student.email,
       expiresAt,
       externalId: params.student.externalId,

@@ -18,6 +18,7 @@ function makeAgent() {
     },
     oob: {
       createInvitation: jest.fn().mockResolvedValue({
+        id: 'oob-001',
         outOfBandInvitation: {
           toUrl: invitationToUrl,
         },
@@ -67,6 +68,7 @@ describe('ActivationLinkService', () => {
       credentialExchangeId: 'credential-exchange-001',
       email: 'caleb.voskuil@gmail.com',
       externalId: 'student-demo-100',
+      outOfBandId: 'oob-001',
     })
     expect(result.offers[0].activationUrl).toMatch(/^unifywallet:\/\/activate\?token=/)
     expect(agent.credentials.createOffer).toHaveBeenCalledWith(

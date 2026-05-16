@@ -59,7 +59,7 @@ export class CredentialService {
 async createOfferInvitation(_params: {
   credentialDefinitionId: string
   attributes: Array<{ name: string; value: unknown }>
-}): Promise<{ invitationUrl: string; credentialExchangeId: string }> {
+}): Promise<{ invitationUrl: string; credentialExchangeId: string; outOfBandId: string }> {
   const attributes = _params.attributes.map((attribute) => ({
     name: String(attribute.name),
     value: String(attribute.value ?? ''),
@@ -90,6 +90,7 @@ async createOfferInvitation(_params: {
     return {
       invitationUrl: outOfBandRecord.outOfBandInvitation.toUrl({ domain: config.agent.endpoint }),
       credentialExchangeId: credentialRecord.id,
+      outOfBandId: outOfBandRecord.id,
     }
   }
 
@@ -106,6 +107,7 @@ async createOfferInvitation(_params: {
       email?: string
       invitationUrl: string
       credentialExchangeId: string
+      outOfBandId: string
     }>
     failures: Array<{ externalId?: string; email?: string; message: string }>
   }> {
@@ -121,6 +123,7 @@ async createOfferInvitation(_params: {
       email?: string
       invitationUrl: string
       credentialExchangeId: string
+      outOfBandId: string
     }> = []
     const failures: Array<{ externalId?: string; email?: string; message: string }> = []
 

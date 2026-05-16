@@ -13,7 +13,7 @@ import { optionalString, requireAttributes, requireObject, requireString } from 
  *
  *   POST /api/credentials/offers
  *     body: { credentialDefinitionId, attributes: [{ name, value }] }
- *     -> { invitationUrl, credentialExchangeId }
+ *     -> { invitationUrl, credentialExchangeId, outOfBandId }
  *
  *   GET  /api/credentials
  *     query: ?state=offer-sent (optional)
