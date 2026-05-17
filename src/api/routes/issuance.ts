@@ -11,23 +11,6 @@ import {
   requireStringArray,
 } from '../validation'
 
-/**
- * Admin Portal issuance setup orchestration.
- *
- *   POST /api/issuance/setup
- *     body: {
- *       issuerDid,
- *       schema: { name, version, attributes },
- *       credentialDefinition: { tag, supportRevocation? },
- *       revocation?: { tag, maximumCredentialNumber }
- *     }
- *     -> { schemaId, credentialDefinitionId, revocationRegistryDefinitionId? }
- *
- * This is the preferred Admin Portal endpoint for AD-70/AD-71 because it
- * reduces the number of UI calls needed to bootstrap issuance. The lower-level
- * schema / credential-definition routes still exist for manual retries and
- * debugging when one ledger write succeeds and a later step fails.
- */
 export function buildIssuanceRouter(agent: UniversityAgent): Router {
   const router = Router()
   const issuance = new IssuanceSetupService(agent)
@@ -35,6 +18,7 @@ export function buildIssuanceRouter(agent: UniversityAgent): Router {
   router.post(
     '/setup',
     asyncHandler(async (req, res) => {
+      // The portal uses this to bootstrap schema, cred-def, and optional revocation together.
       const body = requireObject(req.body)
       const schema = requireObject(body.schema, 'schema')
       const credentialDefinition = requireObject(body.credentialDefinition, 'credentialDefinition')

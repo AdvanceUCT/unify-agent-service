@@ -11,26 +11,6 @@ import {
   requireStringArray,
 } from '../validation'
 
-/**
- * Schema and credential-definition endpoints.
- *
- *   POST /api/schemas
- *     body: { issuerDid, name, version, attributes }
- *     -> { schemaId }
- *
- *   POST /api/credential-definitions
- *     body: { issuerDid, schemaId, tag, supportRevocation }
- *     -> { credentialDefinitionId }
- *
- *   POST /api/credential-definitions/:cdId/revocation-registries
- *     body: { issuerDid, tag, maximumCredentialNumber }
- *     -> { revocationRegistryDefinitionId }
- *
- * These are intentionally low-level escape hatches. The Admin Portal should
- * normally call `POST /api/issuance/setup`, but teammates should use these
- * routes when proving or retrying one specific ledger operation during AD-70
- * and AD-71.
- */
 export function buildSchemasRouter(agent: UniversityAgent): Router {
   const router = Router()
   const schemas = new SchemaService(agent)
@@ -38,6 +18,7 @@ export function buildSchemasRouter(agent: UniversityAgent): Router {
   router.post(
     '/schemas',
     asyncHandler(async (req, res) => {
+      // Low-level route for retrying just the schema write.
       const body = requireObject(req.body)
       const result = await schemas.registerSchema({
         issuerDid: requireString(body, 'issuerDid'),
@@ -52,6 +33,7 @@ export function buildSchemasRouter(agent: UniversityAgent): Router {
   router.post(
     '/credential-definitions',
     asyncHandler(async (req, res) => {
+      // Cred-def writes bind the public schema to this issuer's signing key.
       const body = requireObject(req.body)
       const result = await schemas.registerCredentialDefinition({
         issuerDid: requireString(body, 'issuerDid'),
@@ -66,6 +48,7 @@ export function buildSchemasRouter(agent: UniversityAgent): Router {
   router.post(
     '/credential-definitions/:cdId/revocation-registries',
     asyncHandler(async (req, res) => {
+      // Revocation setup is separate because it can fail after the cred-def succeeds.
       const body = requireObject(req.body)
       const result = await schemas.registerRevocationRegistry({
         credentialDefinitionId: req.params.cdId,

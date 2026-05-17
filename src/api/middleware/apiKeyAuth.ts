@@ -26,9 +26,7 @@ function safeEqual(left: string, right: string): boolean {
 }
 
 export const apiKeyAuth: RequestHandler = (req, res, next) => {
-  // `/api/health` stays public for deploy checks. `/api/wallet/activation/*`
-  // stays public because the student wallet cannot hold the Admin Portal
-  // shared secret; the activation token is the student-facing bearer secret.
+  // Health checks and student activation resolve cannot depend on the Admin Portal key.
   if (isPublicPath(req.path)) {
     next()
     return
@@ -36,10 +34,7 @@ export const apiKeyAuth: RequestHandler = (req, res, next) => {
 
   const token = extractBearerToken(req.header('authorization'))
   if (!token || !safeEqual(token, config.api.key)) {
-    // TODO(AD-75 hardening):
-    // This prevents accidental unauthenticated access, but production should
-    // also require HTTPS, rotate AGENT_API_KEY through deployment secrets, and
-    // consider signed webhook callbacks in `src/events/` for the reverse path.
+    // Keep the response vague so callers cannot tell which part was wrong.
     res.status(401).json({ error: { message: 'Missing or invalid API key.' } })
     return
   }

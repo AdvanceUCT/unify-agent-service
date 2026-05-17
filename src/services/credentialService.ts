@@ -1,27 +1,6 @@
 import type { UniversityAgent } from '../agent'
 import { config } from '../config'
 
-/**
- * Credential issuance lifecycle.
- *
- * The high-level flow per project context:
- *
- *   Admin Portal POSTs an issuance request with the student's attribute set
- *     → service creates a credential offer wrapped in an OOB invitation
- *     → email with deep link is sent to student (Admin Portal handles email)
- *     → student taps link, wallet handshakes + accepts offer
- *     → agent issues the signed VC; CredentialStateChanged events fire
- *     → events bubble up to webhooks so the Admin Portal updates status
- *
- * Auto-accept is set to ContentApproved at the module level, so the agent
- * will not block waiting for a manual approval step on the issuer side.
- *
- * Useful Credo references:
- *   - `agent.credentials.createOffer({ protocolVersion, credentialFormats })`
- *   - `agent.oob.createInvitation({ messages: [offerMessage] })`
- *   - `agent.credentials.getById(id)`
- *   - `agent.credentials.getAll()`
- */
 export class CredentialService {
   constructor(private readonly agent: UniversityAgent) {}
 
@@ -39,50 +18,35 @@ export class CredentialService {
     }
   }
 
-  /**
-   * Create a credential offer + OOB invitation for one student.
-   *
-   * Returns both the URL (for the Admin Portal to email) and the
-   * credentialExchangeId (for status lookups + correlation in events).
-   *
-   * TODO(AD-72 proof requirement):
-   * Creating this record only proves that an offer invitation was generated.
-   * Real issuance is not proven until the student wallet opens the returned
-   * invitation URL, accepts the offer, and `getStatus()` eventually reaches
-   * Credo's terminal `done` state.
-   *
-   * Dependency chain:
-   *   AD-69 issuer DID -> AD-70 schema -> AD-71 cred-def -> this method.
-   * Do not call this "issuing works" if `credentialDefinitionId` was copied
-   * from a stale environment or from another agent wallet.
-   */
-async createOfferInvitation(_params: {
-  credentialDefinitionId: string
-  attributes: Array<{ name: string; value: unknown }>
-}): Promise<{ invitationUrl: string; credentialExchangeId: string; outOfBandId: string }> {
-  const attributes = _params.attributes.map((attribute) => ({
-    name: String(attribute.name),
-    value: String(attribute.value ?? ''),
-  }))
+  async createOfferInvitation(_params: {
+    credentialDefinitionId: string
+    attributes: Array<{ name: string; value: unknown }>
+  }): Promise<{ invitationUrl: string; credentialExchangeId: string; outOfBandId: string }> {
+    // AnonCreds attributes are strings on the wire, even when the portal sends numbers.
+    const attributes = _params.attributes.map((attribute) => ({
+      name: String(attribute.name),
+      value: String(attribute.value ?? ''),
+    }))
 
-  console.log(
-    '[credential-service] issuing attributes',
-    attributes.map((attribute) => ({
-      name: attribute.name,
-      valueType: typeof attribute.value,
-    })),
-  )
+    console.log(
+      '[credential-service] issuing attributes',
+      attributes.map((attribute) => ({
+        name: attribute.name,
+        valueType: typeof attribute.value,
+      })),
+    )
 
-  const { message, credentialRecord } = await this.agent.credentials.createOffer({
-    protocolVersion: 'v2',
-    credentialFormats: {
-      anoncreds: {
-        credentialDefinitionId: _params.credentialDefinitionId,
-        attributes,
+    const { message, credentialRecord } = await this.agent.credentials.createOffer({
+      protocolVersion: 'v2',
+      credentialFormats: {
+        anoncreds: {
+          credentialDefinitionId: _params.credentialDefinitionId,
+          attributes,
+        },
       },
-    },
-  })
+    })
 
+    // Wrap the credential offer in an OOB invitation so the wallet can open it from a link.
     const outOfBandRecord = await this.agent.oob.createInvitation({
       messages: [message],
     })
@@ -111,13 +75,6 @@ async createOfferInvitation(_params: {
     }>
     failures: Array<{ externalId?: string; email?: string; message: string }>
   }> {
-    // TODO(AD-72 / Admin Portal integration):
-    // Today this method returns email-ready deep links but does not persist the
-    // mapping from `externalId`/`email` to `credentialExchangeId`. That is OK
-    // for a stateless API response, but the Admin Portal needs to store that
-    // mapping immediately if it wants reliable retry, polling, or audit after a
-    // page refresh. If persistence belongs in this service instead, add an
-    // explicit storage module rather than hiding writes inside this loop.
     const offers: Array<{
       externalId?: string
       email?: string
@@ -129,6 +86,7 @@ async createOfferInvitation(_params: {
 
     for (const student of _params.students) {
       try {
+        // Keep going when one student fails so a bad row does not block the whole batch.
         const offer = await this.createOfferInvitation({
           credentialDefinitionId: _params.credentialDefinitionId,
           attributes: student.attributes,
@@ -150,18 +108,6 @@ async createOfferInvitation(_params: {
     return { offers, failures }
   }
 
-  /**
-   * Look up the current state of a credential exchange.
-   *
-   * Project a Credo credential exchange record to an Admin Portal DTO.
-   *
-   * TODO(AD-73 / status owner):
-   * Confirm the exact states the Admin Portal should display. Credo returns
-   * protocol states such as `offer-sent`, `request-received`,
-   * `credential-issued`, and `done`; the UI may want friendlier labels like
-   * Offered, Accepted, Issued, or Failed. Keep that mapping in one place so
-   * tests can cover it.
-   */
   async getStatus(_credentialExchangeId: string): Promise<{
     id: string
     state: string
@@ -171,6 +117,7 @@ async createOfferInvitation(_params: {
   }> {
     const record = await this.agent.credentials.getById(_credentialExchangeId)
 
+    // Return our stable DTO shape, not the full Credo record.
     return {
       id: record.id,
       state: record.state,
@@ -180,11 +127,6 @@ async createOfferInvitation(_params: {
     }
   }
 
-  /**
-   * List every credential exchange, optionally filtered by state.
-   *
-   * List Credo credential exchanges, optionally filtered by state.
-   */
   async list(_filter?: { state?: string }): Promise<
     Array<{ id: string; state: string; connectionId?: string; updatedAt: string }>
   > {

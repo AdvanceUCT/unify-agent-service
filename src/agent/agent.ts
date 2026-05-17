@@ -12,13 +12,6 @@ import { config } from '../config'
 import { buildAgentModules } from './modules'
 import type { UniversityAgent } from './types'
 
-/**
- * Construct, wire transports for, and initialise the Credo agent.
- *
- * Returns the fully-initialised agent so callers can attach event listeners
- * and begin handling requests immediately. The caller is responsible for
- * shutting it down (`agent.shutdown()`) on process exit.
- */
 export async function createAgent(): Promise<UniversityAgent> {
   const initConfig: InitConfig = {
     label: config.agent.label,
@@ -37,6 +30,7 @@ export async function createAgent(): Promise<UniversityAgent> {
     dependencies: agentDependencies,
   })
 
+  // DIDComm comes in over HTTP, while outbound messages may use HTTP or WS.
   agent.registerInboundTransport(new HttpInboundTransport({ port: config.agent.port }))
   agent.registerOutboundTransport(new HttpOutboundTransport())
   agent.registerOutboundTransport(new WsOutboundTransport())

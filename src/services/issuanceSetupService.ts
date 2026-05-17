@@ -34,25 +34,6 @@ export class IssuanceSetupService {
     this.schemas = new SchemaService(agent)
   }
 
-  /**
-   * Admin Portal friendly setup flow for issuance prerequisites.
-   *
-   * What this method does today:
-   *   1. Registers a schema on the ledger.
-   *   2. Registers a credential definition for that schema.
-   *   3. Optionally registers a revocation registry and initial status list.
-   *
-   * What it deliberately does not do yet:
-   *   - Persist setup ids in an app database.
-   *   - Make setup idempotent across retries.
-   *   - Create credential offers for students.
-   *
-   * TODO(AD-71 / Admin Portal contract):
-   * If revocation setup fails after the schema and credential definition have
-   * been created, the thrown AppError includes those partial ids in `details`.
-   * The Admin Portal should surface/store them so the team can retry only the
-   * revocation step instead of accidentally creating duplicate ledger objects.
-   */
   async setup(params: IssuanceSetupInput): Promise<IssuanceSetupResult> {
     const supportRevocation = params.credentialDefinition.supportRevocation ?? Boolean(params.revocation)
 
@@ -88,6 +69,7 @@ export class IssuanceSetupService {
     }
 
     try {
+      // If this fails, return the schema and cred-def ids so the portal can recover cleanly.
       const revocation = await this.schemas.registerRevocationRegistry({
         issuerDid: params.issuerDid,
         credentialDefinitionId: credentialDefinition.credentialDefinitionId,

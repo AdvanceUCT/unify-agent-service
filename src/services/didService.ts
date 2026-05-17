@@ -5,29 +5,9 @@ import { Hasher, KeyType, TypedArrayEncoder } from '@credo-ts/core'
 import type { UniversityAgent } from '../agent'
 import { AppError } from '../errors'
 
-/**
- * Issuer DID lifecycle.
- *
- * The university issues credentials under a single Indy DID anchored on the
- * public ledger. That DID is the trust root other agents use to verify
- * credentials we sign. It must be created once during onboarding (via the
- * Admin Portal), then persisted and reused for every issuance.
- *
- * Persistence: the DID record and its private key are stored inside the
- * Credo/Askar encrypted wallet volume (agent-data). No separate database
- * layer is needed for the PoC.
- *
- */
 export class DidService {
   constructor(private readonly agent: UniversityAgent) {}
 
-  /**
-   * Return the issuer DID owned by this wallet, or null if the agent has not
-   * been bootstrapped yet.
-   *
-   * Throws 500 if the wallet somehow contains more than one Indy DID — that
-   * should never happen and indicates wallet corruption or a bug.
-   */
   async getIssuerDid(): Promise<string | null> {
     const dids = await this.agent.dids.getCreatedDids({ method: 'indy' })
 
@@ -41,17 +21,6 @@ export class DidService {
     return dids[0]?.did ?? null
   }
 
-  /**
-   * Create the university's issuer DID on BCovrin Test and import it into the
-   * Credo wallet so this agent can sign as that DID.
-   *
-   * This is a one-time onboarding operation. Calling it again when a DID
-   * already exists returns a 409 with the existing DID — it never creates a
-   * second issuer identity.
-   *
-   * The seed is generated server-side and never logged, returned, or included
-   * in any error body. The Admin Portal receives only the resulting DID.
-   */
   async createIssuerDid(params: { alias?: string }): Promise<{ did: string }> {
     const existing = await this.getIssuerDid()
     if (existing) {
@@ -60,8 +29,7 @@ export class DidService {
       throw err
     }
 
-    // Generate 32 hex chars of entropy. Treated as the raw private key seed
-    // for the Ed25519 key pair. Never logged or returned.
+    // Generate the DID seed server-side so callers never handle issuer key material.
     const seed = randomBytes(16).toString('hex')
 
     const key = await this.agent.wallet.createKey({
@@ -75,11 +43,7 @@ export class DidService {
 
     let bcovrinRes: Response
     try {
-      // TODO(production ledger onboarding):
-      // BCovrin's self-service registration endpoint is test-network only.
-      // MainNet-style deployments need an endorsed NYM transaction or another
-      // governed DID onboarding flow; do not reuse this endpoint outside PoC
-      // and demo environments.
+      // BCovrin's self-registration endpoint is only for test and demo wallets.
       bcovrinRes = await fetch('http://test.bcovrin.vonx.io/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -111,10 +75,6 @@ export class DidService {
   }
 }
 
-/**
- * Derive the Indy unqualified DID from a base58-encoded verkey.
- * Algorithm: base58( SHA-256(verkeyBytes)[0..15] )
- */
 function unqualifiedDidFromVerkey(verkey: string): string {
   const verkeyBytes = TypedArrayEncoder.fromBase58(verkey)
   const hash = Hasher.hash(verkeyBytes, 'sha-256')

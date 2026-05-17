@@ -8,24 +8,6 @@ import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireAttributes, requireObject, requireString } from '../validation'
 
-/**
- * Credential issuance + revocation endpoints.
- *
- *   POST /api/credentials/offers
- *     body: { credentialDefinitionId, attributes: [{ name, value }] }
- *     -> { invitationUrl, credentialExchangeId, outOfBandId }
- *
- *   GET  /api/credentials
- *     query: ?state=offer-sent (optional)
- *     -> [{ id, state, connectionId?, updatedAt }]
- *
- *   GET  /api/credentials/:id
- *     -> { id, state, connectionId?, credentialDefinitionId?, updatedAt }
- *
- *   POST /api/credentials/:id/revoke
- *     body: { reason?: string }
- *     -> { revokedAt }
- */
 export function buildCredentialsRouter(agent: UniversityAgent): Router {
   const router = Router()
   const activationLinks = new ActivationLinkService(agent)
@@ -35,6 +17,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.post(
     '/offers',
     asyncHandler(async (req, res) => {
+      // Single-offer route stays useful for manual testing and one-off issuance.
       const body = requireObject(req.body)
       const result = await credentials.createOfferInvitation({
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
@@ -47,6 +30,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.post(
     '/offers/batch',
     asyncHandler(async (req, res) => {
+      // Batch offer creation returns per-student failures instead of failing the whole class.
       const body = requireObject(req.body)
       const students = body.students
 
@@ -73,6 +57,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.post(
     '/activation-links/batch',
     asyncHandler(async (req, res) => {
+      // These links hide the raw OOB invitation behind a short-lived activation token.
       const body = requireObject(req.body)
       const students = body.students
 
@@ -99,13 +84,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.get(
     '/',
     asyncHandler(async (req, res) => {
-      // TODO(AD-73 / credential status owner):
-      // This list endpoint is useful for polling, but it is not yet a complete
-      // Admin Portal status contract. Confirm with the Admin Portal team which
-      // fields their table needs: external student id, email, current state,
-      // connection id, credential definition id, last transition time, and any
-      // failure reason. Add only stable fields here; avoid leaking raw Credo
-      // records because their shape can change across Credo versions.
+      // Keep the status DTO small instead of leaking raw Credo records.
       const state = typeof req.query.state === 'string' ? req.query.state : undefined
       const result = await credentials.list(state ? { state } : undefined)
       res.json(result)
@@ -115,12 +94,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   router.get(
     '/:id',
     asyncHandler(async (req, res) => {
-      // TODO(AD-73 / credential status owner):
-      // This is the single-student polling endpoint the Admin Portal will call
-      // after AD-72 returns a `credentialExchangeId`. Acceptance criteria should
-      // include polling through the full happy path:
-      //   offer-sent -> request-received -> credential-issued -> done
-      // and returning a useful 404 when the id is unknown.
+      // The Admin Portal polls this after issuance returns a credentialExchangeId.
       const result = await credentials.getStatus(req.params.id)
       res.json(result)
     })

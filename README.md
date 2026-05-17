@@ -4,7 +4,8 @@ Backend service that runs the university's Credo-TS identity agent. Responsible
 for all interactions with the public Indy ledger and all credential issuance
 logic. Exposes a REST API consumed only by the Admin Portal.
 
-See `docs-local/ids-project-context.md` for the full system context.
+This README is the main project guide. Keep setup notes, endpoint behavior, and
+deployment assumptions here so teammates do not have to chase separate docs.
 
 ## Stack
 
@@ -21,9 +22,9 @@ See `docs-local/ids-project-context.md` for the full system context.
 Credo `0.5.x` is the last CommonJS-based release line; from `0.6.0` onwards
 the framework is ESM-only, which would force the entire service (and any
 team-developed code) onto ESM with `.js` extensions in TypeScript imports.
-For a scaffolded handoff that's avoidable churn, so we pin to the latest
-`0.5.x`. The native bindings (askar/anoncreds/indy-vdr at `0.2.x`) are
-matched to that line.
+That would add churn without helping this service, so we pin to the latest
+`0.5.x`. The native bindings (askar/anoncreds/indy-vdr at `0.2.x`) are matched
+to that line.
 
 The native packages depend on `@2060.io/ffi-napi` (a Node 18+ compatible fork
 of the unmaintained `ffi-napi`). Under no circumstances add an `overrides`
@@ -122,8 +123,7 @@ src/
 ### How to add a new endpoint
 
 1. Add a method to the relevant service in `src/services/` (this is where the
-   Credo API call goes — service files have the exact `agent.modules.X` calls
-   you need in their JSDoc TODOs)
+   Credo API call goes)
 2. Add the route handler in the matching `src/api/routes/` file. Routes never
    import from `@credo-ts/*` directly — only from `../../services/*`
 3. If the operation produces a state change worth surfacing to the Admin
