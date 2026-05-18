@@ -85,6 +85,22 @@ unify-agent-service/
 
 ---
 
+## Brief Setup
+
+```bash
+git clone https://github.com/AdvanceUCT/unify-agent-service.git
+cd unify-agent-service
+npm install
+cp .env.example .env
+docker compose up --build
+```
+
+Update `.env` before running outside local development. At minimum, replace
+`AGENT_WALLET_KEY` and `AGENT_API_KEY`, and set `AGENT_ENDPOINT` to the public
+DIDComm URL when testing with a real phone.
+
+---
+
 ## Setup
 
 ### Prerequisites
