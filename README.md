@@ -1,250 +1,205 @@
-# Unify — Identity Agent Service
+# Unify Identity Agent Service
+[![Node.js](https://img.shields.io/badge/Node.js-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Express.js](https://img.shields.io/badge/Express.js-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Credo TS](https://img.shields.io/badge/Credo_TS-2D3748?logo=typescript&logoColor=white)](https://credo.js.org/)
+[![AnonCreds](https://img.shields.io/badge/AnonCreds-00599C?logo=hyperledger&logoColor=white)](https://hyperledger.github.io/anoncreds-spec/)
+[![Indy VDR](https://img.shields.io/badge/Indy_VDR-003B57?logo=hyperledger&logoColor=white)](https://github.com/hyperledger/indy-vdr)
+[![Jest](https://img.shields.io/badge/Jest-C21325?logo=jest&logoColor=white)](https://jestjs.io/)
 
-Backend service that runs the university's Credo-TS identity agent. Responsible
-for all interactions with the public Indy ledger and all credential issuance
-logic. Exposes a REST API consumed only by the Admin Portal.
+<div align="center">
 
-See `docs-local/ids-project-context.md` for the full system context.
+Backend service for the Unify university credential issuer.
 
-## Stack
+It runs the Credo agent, connects to the Indy ledger, creates credential offers,
+and exposes the REST API used by the Admin Portal.
+</div>
 
-- **Runtime**: Node.js 22 LTS (Linux, inside Docker)
-- **Language**: TypeScript 5.6 (CommonJS output)
-- **SSI framework**: [Credo-TS](https://credo.js.org/) `^0.5.13`
-- **Wallet / KMS**: [Aries Askar](https://github.com/hyperledger/aries-askar) via `@hyperledger/aries-askar-nodejs`
-- **Credential format**: [AnonCreds](https://hyperledger.github.io/anoncreds-spec/) via `@hyperledger/anoncreds-nodejs`
-- **Ledger client**: [Indy VDR](https://github.com/hyperledger/indy-vdr) via `@hyperledger/indy-vdr-nodejs` (default network: BCovrin Test)
-- **HTTP API**: Express 4
+---
 
-## Why these versions
+## Overview
 
-Credo `0.5.x` is the last CommonJS-based release line; from `0.6.0` onwards
-the framework is ESM-only, which would force the entire service (and any
-team-developed code) onto ESM with `.js` extensions in TypeScript imports.
-For a scaffolded handoff that's avoidable churn, so we pin to the latest
-`0.5.x`. The native bindings (askar/anoncreds/indy-vdr at `0.2.x`) are
-matched to that line.
+The Unify Identity Agent Service is the issuer-side backend for the student
+digital identity system. It wraps Credo-TS behind a small Express API so the
+Admin Portal can bootstrap issuance, generate student activation links, and
+track credential exchange state.
 
-The native packages depend on `@2060.io/ffi-napi` (a Node 18+ compatible fork
-of the unmaintained `ffi-napi`). Under no circumstances add an `overrides`
-entry that aliases `@2060.io/ffi-napi` to anything else — that was the source
-of the original `(0, ffi_napi_1.Callback) is not a function` startup error.
+The service features:
 
-The `overrides` block in `package.json` *does* pin the three Hyperledger
-`*-shared` packages to single versions. This is required: each native binding
-package (`anoncreds-nodejs`, `aries-askar-nodejs`, `indy-vdr-nodejs`) declares
-its `*-shared` peer at an exact version, while `@credo-ts/*` peer-deps a
-range. Without the override npm installs both, and TypeScript then sees two
-distinct nominal `Anoncreds`/`Askar`/`IndyVdr` types and refuses to build with
-"Types have separate declarations of a private property `_handle`" errors.
-If you bump any native binding version, bump the matching `*-shared` override
-to the same version.
+- **Issuer DID Management** - Creates and reuses the university issuer DID
+- **Ledger Setup** - Registers schemas, credential definitions, and revocation setup data
+- **Credential Offers** - Generates single or batch AnonCreds credential offers
+- **Student Activation Links** - Creates short-lived tokenized links for email delivery
+- **DIDComm Messaging** - Runs inbound and outbound transports for wallet handshakes
+- **Webhook Events** - Sends connection and credential state changes back to the Admin Portal
+- **Docker Development** - Runs the native Credo dependencies in a Linux container
 
-## Local development
+---
 
-This service is intended to run **only inside Docker** during development.
-The native bindings (`ffi-napi`, askar's `.so`) compile cleanly on Linux but
-are painful on Windows; running everything inside the bookworm-slim base image
-sidesteps all of that.
+## Tech Stack
+
+### Backend
+[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+
+[![Express.js](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+
+### SSI / Credentials
+[![Credo TS](https://img.shields.io/badge/Credo_TS-2D3748?style=for-the-badge&logo=typescript&logoColor=white)](https://credo.js.org/)
+
+[![Aries Askar](https://img.shields.io/badge/Aries_Askar-4B5563?style=for-the-badge&logo=hyperledger&logoColor=white)](https://github.com/hyperledger/aries-askar)
+
+[![AnonCreds](https://img.shields.io/badge/AnonCreds-00599C?style=for-the-badge&logo=hyperledger&logoColor=white)](https://hyperledger.github.io/anoncreds-spec/)
+
+[![Indy VDR](https://img.shields.io/badge/Indy_VDR-003B57?style=for-the-badge&logo=hyperledger&logoColor=white)](https://github.com/hyperledger/indy-vdr)
+
+### Testing
+[![Jest](https://img.shields.io/badge/Jest-C21325?style=for-the-badge&logo=jest&logoColor=white)](https://jestjs.io/)
+
+[![ts-jest](https://img.shields.io/badge/ts--jest-3178C6?style=for-the-badge&logo=jest&logoColor=white)](https://kulshekhar.github.io/ts-jest/)
+
+---
+
+## Project Structure
+
+```
+unify-agent-service/
+├── genesis/                  # Indy ledger genesis transaction files
+├── src/
+│   ├── agent/                # Credo agent setup, modules, networks, tails files
+│   ├── api/                  # Express server, middleware, validation, routes
+│   ├── config/               # Environment-driven runtime configuration
+│   ├── events/               # Credo event listeners and webhook dispatch
+│   ├── services/             # Issuer DID, setup, offers, activation, status logic
+│   ├── errors.ts             # Expected API error type
+│   └── index.ts              # Application entrypoint and graceful shutdown
+├── docker-compose.yml        # Local service container setup
+├── Dockerfile                # Production-style container build
+├── package.json              # Scripts and dependencies
+└── README.md                 # This file
+```
+
+---
+
+## Brief Setup
 
 ```bash
-# from the repo root
-cp .env.example .env       # then edit AGENT_WALLET_KEY to a strong secret
+git clone https://github.com/AdvanceUCT/unify-agent-service.git
+cd unify-agent-service
+npm install
+cp .env.example .env
 docker compose up --build
 ```
 
-When the container is healthy you should see:
+Update `.env` before running outside local development. At minimum, replace
+`AGENT_WALLET_KEY` and `AGENT_API_KEY`, and set `AGENT_ENDPOINT` to the public
+DIDComm URL when testing with a real phone.
 
-```
-[agent] initialised — label="university-identity-agent"
-[api]   listening on http://0.0.0.0:3000
-[didcomm] inbound transport on http://0.0.0.0:3001
-```
+---
 
-Smoke-test the API:
+## Setup
 
+### Prerequisites
+
+- **Git**
+- **Docker Desktop**
+- **Node.js 20+** for local typecheck/test commands
+- **npm**
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/AdvanceUCT/unify-agent-service.git
+   cd unify-agent-service
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Create the environment file**
+   ```bash
+   cp .env.example .env
+   ```
+
+4. **Set the important environment values**
+
+   ```env
+   AGENT_WALLET_KEY=replace-with-a-strong-secret
+   AGENT_API_KEY=replace-with-a-shared-admin-portal-secret
+   AGENT_ENDPOINT=http://localhost:3001
+   API_PORT=3000
+   AGENT_PORT=3001
+   ```
+
+   For a deployed server, `AGENT_ENDPOINT` must be the public DIDComm URL that
+   the student wallet can reach. `AGENT_API_KEY` must match the Admin Portal
+   environment value.
+
+5. **Start the service with Docker**
+   ```bash
+   docker compose up --build
+   ```
+
+   The API will run on:
+
+   ```bash
+   http://localhost:3000
+   ```
+
+   The DIDComm inbound transport will run on:
+
+   ```bash
+   http://localhost:3001
+   ```
+
+6. **Check the API**
+   ```bash
+   curl http://localhost:3000/api/health
+   ```
+
+   Expected response:
+
+   ```json
+   {
+     "status": "ok",
+     "agentLabel": "university-identity-agent",
+     "isInitialized": true
+   }
+   ```
+
+7. **Reset local wallet state when needed**
+   ```bash
+   docker compose down -v
+   ```
+
+   This removes the persisted `agent-data` Docker volume and clears stale DID,
+   schema, credential definition, and activation-link data.
+
+---
+
+## Testing
+
+### TypeScript Checks
 ```bash
-curl http://localhost:3000/api/health
-# {"status":"ok","agentLabel":"university-identity-agent","isInitialized":true}
+npm run typecheck
 ```
 
-The encrypted Askar wallet is persisted in the named volume `agent-data`,
-mounted at `/home/node/.afj` inside the container. To reset wallet state:
-
+### Unit Tests
 ```bash
-docker compose down -v
+npm test
+npm test -- --runInBand
 ```
 
-## Project layout
-
-```
-src/
-├── index.ts                   Boot: load config → init agent → register events → start API
-│
-├── config/
-│   └── index.ts               Env-driven config with validation
-│
-├── agent/                     Everything Credo-specific lives here
-│   ├── index.ts               · Public exports for the rest of the app
-│   ├── agent.ts               · createAgent() factory
-│   ├── modules.ts             · Module composition (askar, anoncreds, indy-vdr,
-│   │                              connections, credentials, proofs, dids)
-│   ├── networks.ts            · Indy ledger network configurations
-│   └── types.ts               · UniversityAgent / AgentModules type aliases
-│
-├── events/                    Subscribe to agent events; forward to webhooks/logs
-│   ├── index.ts               · registerAgentEventHandlers(agent)
-│   ├── connectionEvents.ts    · ConnectionStateChanged listener
-│   └── credentialEvents.ts    · CredentialStateChanged listener
-│
-├── services/                  Business logic — wraps Credo APIs into use-case methods
-│   ├── didService.ts          · Issuer DID lifecycle
-│   ├── schemaService.ts       · Schema + credential definition + revocation registry
-│   ├── connectionService.ts   · OOB invitations + connection list
-│   ├── credentialService.ts   · Credential offers, status, list
-│   └── revocationService.ts   · Credential revocation
-│
-└── api/                       HTTP layer — Express, only knows about services
-    ├── server.ts              · createApiServer(agent) → Express app
-    ├── middleware/
-    │   ├── asyncHandler.ts    · Forward async route errors to errorHandler
-    │   ├── errorHandler.ts    · Centralised error → JSON 4xx/5xx response
-    │   └── requestLogger.ts   · Per-request method/path/duration logging
-    └── routes/
-        ├── index.ts           · Mount sub-routers under /api
-        ├── health.ts          · GET /api/health  (implemented)
-        ├── dids.ts            · /api/dids/issuer (stub)
-        ├── schemas.ts         · /api/schemas, /api/credential-definitions (stub)
-        ├── connections.ts     · /api/connections, /api/connections/invitations (stub)
-        └── credentials.ts     · /api/credentials, /api/credentials/:id, /revoke (stub)
+### Production Build
+```bash
+npm run build
 ```
 
-### How to add a new endpoint
-
-1. Add a method to the relevant service in `src/services/` (this is where the
-   Credo API call goes — service files have the exact `agent.modules.X` calls
-   you need in their JSDoc TODOs)
-2. Add the route handler in the matching `src/api/routes/` file. Routes never
-   import from `@credo-ts/*` directly — only from `../../services/*`
-3. If the operation produces a state change worth surfacing to the Admin
-   Portal, add a webhook payload in the relevant `src/events/*` listener
-
-This separation means each layer has one job:
-- **Routes**: parse HTTP, validate input, return JSON
-- **Services**: speak fluent Credo
-- **Events**: observe + forward, never drive
-
-## Endpoint inventory
-
-| Method | Path                                                      | Purpose                              |
-| ------ | --------------------------------------------------------- | ------------------------------------ |
-| GET    | `/api/health`                                             | Liveness probe (implemented)         |
-| GET    | `/api/status`                                             | Agent + ledger status for Admin      |
-| GET    | `/api/dids/issuer`                                        | Get the university's issuer DID      |
-| POST   | `/api/dids/issuer`                                        | Create the issuer DID (one-time)     |
-| POST   | `/api/issuance/setup`                                     | Create schema, cred-def, revocation  |
-| POST   | `/api/schemas`                                            | Anchor a credential schema on Indy   |
-| POST   | `/api/credential-definitions`                             | Anchor a credential definition       |
-| POST   | `/api/credential-definitions/:cdId/revocation-registries` | Set up revocation                    |
-| GET    | `/tails/:tailsHash`                                       | Public tails-file download           |
-| POST   | `/api/connections/invitations`                            | Create an OOB invitation             |
-| GET    | `/api/connections`                                        | List active DIDComm connections      |
-| POST   | `/api/credentials/offers`                                 | Create + email-ready credential offer |
-| POST   | `/api/credentials/offers/batch`                           | Create email-ready offers in bulk    |
-| POST   | `/api/credentials/activation-links/batch`                 | Create tokenized wallet activation links |
-| GET    | `/api/credentials`                                        | List credential exchanges            |
-| GET    | `/api/credentials/:id`                                    | Get exchange status                  |
-| POST   | `/api/credentials/:id/revoke`                             | Revoke an issued credential          |
-
-All `/api` endpoints except `GET /api/health` and
-`POST /api/wallet/activation/resolve` require
-`Authorization: Bearer $AGENT_API_KEY`. Wallet activation resolve is public
-because the activation token is the student-facing bearer secret. `/tails/:tailsHash`
-is intentionally public so holder/verifier agents can download revocation tails files.
-
-## Environment variables
-
-See `.env.example`. All values have dev-friendly defaults except `AGENT_WALLET_KEY`,
-which must be replaced with a high-entropy secret in any non-local environment.
-
-| Variable             | Purpose                                                                  |
-| -------------------- | ------------------------------------------------------------------------ |
-| `AGENT_NAME`         | Human-readable agent label (surfaces in DIDComm handshakes)              |
-| `AGENT_WALLET_ID`    | Logical wallet identifier used by Askar                                  |
-| `AGENT_WALLET_KEY`   | Passphrase that derives the Askar master key                             |
-| `AGENT_ENDPOINT`     | Public DIDComm endpoint advertised in OOB invitations                    |
-| `AGENT_PORT`         | Port the inbound HTTP DIDComm transport binds to                         |
-| `API_PORT`           | Port the Express REST API binds to                                       |
-| `AGENT_API_KEY`      | Bearer token required for Admin Portal REST API calls except health      |
-| `TAILS_BASE_URL`     | Public base URL used in revocation registry tails locations              |
-| `TAILS_DIRECTORY`    | Local persisted directory for generated tails files                      |
-| `WEBHOOK_URL`        | (optional) Admin Portal endpoint to receive state-change events          |
-| `WEBHOOK_SIGNING_SECRET` | (optional) HMAC key for `X-Unify-Signature` webhook headers          |
-
-For physical-device wallet tests, `AGENT_ENDPOINT` must be a phone-reachable
-DIDComm URL, `TAILS_BASE_URL` must be phone-reachable if revocation is enabled,
-and the wallet's `EXPO_PUBLIC_UNIFY_AGENT_API_BASE_URL` must point at the
-phone-reachable REST API URL.
-
-## Admin Portal webhooks
-
-When `WEBHOOK_URL` is configured, the service posts issuer-side state changes
-without blocking Credo event processing. Connection events use:
-
-```json
-{
-  "type": "connection.stateChanged",
-  "connectionId": "connection-001",
-  "state": "completed",
-  "previousState": "response-sent",
-  "theirLabel": "UNIFY Student Wallet",
-  "outOfBandId": "oob-001",
-  "timestamp": "2026-05-10T12:00:00.000Z"
-}
-```
-
-Credential events use:
-
-```json
-{
-  "type": "credential.stateChanged",
-  "credentialExchangeId": "credential-exchange-001",
-  "state": "done",
-  "previousState": "credential-issued",
-  "connectionId": "connection-001",
-  "timestamp": "2026-05-10T12:00:00.000Z"
-}
-```
-
-If `WEBHOOK_SIGNING_SECRET` is set, requests include
-`X-Unify-Signature: sha256=<hex-hmac-of-json-body>`. Issuer-side credential
-state `done` is the Admin Portal completion signal for the wallet issuance flow.
-
-## What's implemented vs. what's left
-
-Implemented as part of the scaffold:
-- Credo agent fully wired with Askar (storage), AnonCreds, Indy VDR (BCovrin),
-  Connections, Credentials, Proofs, and DIDs modules — including auto-accept
-  on connections + credentials so the wallet handshake / issuance flow runs
-  end-to-end without manual intervention on the issuer side
-- Inbound HTTP DIDComm transport + outbound HTTP/WS transports
-- Express REST API with route → service → agent layering, request logging,
-  and centralised error handling
-- API key authentication for Admin Portal endpoints, with public health checks
-- Agent status endpoint with a lightweight Indy VDR ledger probe
-- Issuer DID creation + lookup on BCovrin Test with wallet persistence
-- One-call issuance setup endpoint for schema, credential definition, and
-  optional revocation registry setup
-- Local tails-file publishing under `/tails/:tailsHash` for revocation registries
-- Schema, credential-definition, revocation-registry, OOB invitation, and
-  credential-offer service methods wired to Credo
-- Batch credential-offer generation that returns email-ready deep links for
-  the Admin Portal to deliver
-- Event listeners for connection + credential state changes, with optional
-  signed webhook dispatch when `WEBHOOK_URL` is configured
-- Graceful shutdown that closes the agent (flushes wallet writes, disconnects
-  ledger pool)
-- Docker-only dev workflow with persistent wallet volume
-
-To be implemented by the team:
-- Credential revocation (`RevocationService`)
+---

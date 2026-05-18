@@ -37,6 +37,7 @@ export class WalletActivationService {
       throw new AppError(404, 'Activation token was not found.')
     }
 
+    // Expired links should fail before the wallet gets the stored OOB invitation.
     if (isExpired(activation.expiresAt)) {
       throw new AppError(410, 'Activation token has expired.')
     }

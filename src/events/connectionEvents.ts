@@ -7,16 +7,6 @@ import type { UniversityAgent } from '../agent'
 
 import { dispatchWebhook } from './webhookDispatcher'
 
-/**
- * Subscribe to DIDComm connection state changes.
- *
- * State machine (abridged):
- *   invited → request-received → response-sent → completed
- *
- * The Admin Portal cares mostly about `completed` (a student has linked
- * their wallet to the OOB invitation we emailed them) so it can light up
- * the issuance row in real time.
- */
 export function registerConnectionEventHandlers(agent: UniversityAgent): void {
   agent.events.on<ConnectionStateChangedEvent>(
     ConnectionEventTypes.ConnectionStateChanged,
@@ -27,6 +17,7 @@ export function registerConnectionEventHandlers(agent: UniversityAgent): void {
         `[events] connection ${connectionRecord.id}: ${previousState ?? '∅'} → ${connectionRecord.state}`
       )
 
+      // Webhooks are fire-and-forget so Credo event processing is not blocked.
       void dispatchWebhook({
         connectionId: connectionRecord.id,
         outOfBandId: connectionRecord.outOfBandId,

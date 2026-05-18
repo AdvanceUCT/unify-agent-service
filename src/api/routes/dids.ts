@@ -6,16 +6,6 @@ import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireObject } from '../validation'
 
-/**
- * Issuer DID endpoints.
- *
- *   GET  /api/dids/issuer   → { did }          200  (or 404 if not yet created)
- *   POST /api/dids/issuer   → { did }          201  (one-time onboarding)
- *                           → { error, did }   409  (DID already exists)
- *
- * POST body: { alias?: string }
- * The seed is generated server-side and never accepted from the caller.
- */
 export function buildDidsRouter(agent: UniversityAgent): Router {
   const router = Router()
   const dids = new DidService(agent)
@@ -35,6 +25,7 @@ export function buildDidsRouter(agent: UniversityAgent): Router {
   router.post(
     '/issuer',
     asyncHandler(async (req, res) => {
+      // The key seed is generated in the service, never accepted from the API.
       const body = requireObject(req.body ?? {})
       const alias = optionalString(body, 'alias')
 

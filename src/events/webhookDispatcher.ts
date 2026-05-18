@@ -52,6 +52,7 @@ export async function dispatchWebhook(
   const url = options.url === undefined ? config.webhooks.url : options.url
 
   if (!url) {
+    // Local dev can run without a portal callback URL.
     return
   }
 
@@ -64,6 +65,7 @@ export async function dispatchWebhook(
   }
 
   if (signingSecret) {
+    // The portal can verify this without sharing the API bearer token.
     headers['X-Unify-Signature'] = signatureFor(body, signingSecret)
   }
 

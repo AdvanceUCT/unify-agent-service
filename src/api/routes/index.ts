@@ -11,14 +11,10 @@ import { buildSchemasRouter } from './schemas'
 import { buildStatusRouter } from './status'
 import { buildWalletActivationRouter } from './walletActivation'
 
-/**
- * Mount every sub-router under a single root.
- *
- * Add new resources here as the team builds them out.
- */
 export function buildApiRouter(agent: UniversityAgent): Router {
   const router = Router()
 
+  // Keep route mounting in one place so auth and logging wrap the same API tree.
   router.use('/health', buildHealthRouter(agent))
   router.use('/status', buildStatusRouter(agent))
   router.use('/dids', buildDidsRouter(agent))

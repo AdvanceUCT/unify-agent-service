@@ -18,30 +18,6 @@ function assertFinished(operation: string, state: RegistrationState): void {
   throw new AppError(422, `${operation} did not finish synchronously.`)
 }
 
-/**
- * Credential schema and credential-definition management.
- *
- * Vocabulary:
- *   - Schema:                describes the *attributes* a credential has
- *                            (e.g. studentNumber, fullName, faculty, ...).
- *                            Schemas are public, anchored on the Indy ledger.
- *   - Credential definition: cryptographic binding of a schema to the
- *                            issuer's signing key. Verifiers fetch this to
- *                            verify signatures. Also public, also on-ledger.
- *   - Revocation registry:   created alongside a cred-def if the issuer
- *                            wants to be able to revoke later. Optional but
- *                            required for the project's revocation feature.
- *
- * Lifecycle (one-time per university deployment, run from the Admin Portal):
- *   1. Create schema(s) — the shared base + optional fields per project doc
- *   2. Create credential definition tied to the issuer DID + schema
- *   3. Create revocation registry tied to the credential definition
- *
- * Useful Credo references:
- *   - `agent.modules.anoncreds.registerSchema(...)`
- *   - `agent.modules.anoncreds.registerCredentialDefinition(...)`
- *   - `agent.modules.anoncreds.registerRevocationRegistryDefinition(...)`
- */
 export class SchemaService {
   constructor(private readonly agent: UniversityAgent) {}
 
@@ -52,23 +28,13 @@ export class SchemaService {
     }
   }
 
-  /**
-   * Anchor a credential schema on the Indy ledger.
-   *
-   * Calls the Indy VDR AnonCreds registry and returns the resulting schemaId.
-   *
-   * TODO(AD-70 dependency note):
-   * This method is already wired to the real Credo AnonCreds registry, but it
-   * cannot be proven until AD-69 returns a real issuer DID and AD-68 shows the
-   * BCovrin pool as reachable. When testing, use the exact DID returned by
-   * `GET /api/dids/issuer`; do not paste a random DID from another wallet.
-   */
   async registerSchema(_params: {
     issuerDid: string
     name: string
     version: string
     attributes: string[]
   }): Promise<{ schemaId: string }> {
+    // The schema is public ledger data: just names, not student values.
     const result = await this.agent.modules.anoncreds.registerSchema({
       schema: {
         issuerId: _params.issuerDid,
@@ -88,25 +54,13 @@ export class SchemaService {
     return { schemaId }
   }
 
-  /**
-   * Anchor a credential definition tied to a schema on the Indy ledger.
-   *
-   * Set `supportRevocation: true` if a revocation registry will be created.
-   *
-   * The repo exposes both low-level setup endpoints and the Admin Portal
-   * orchestration endpoint:
-   *   POST /api/schemas
-   *   POST /api/credential-definitions
-   *   POST /api/credential-definitions/:cdId/revocation-registries
-   *   POST /api/issuance/setup
-   * Keep this method low-level so retry/error handling stays clear.
-   */
   async registerCredentialDefinition(_params: {
     issuerDid: string
     schemaId: string
     tag: string
     supportRevocation: boolean
   }): Promise<{ credentialDefinitionId: string }> {
+    // The cred-def ties this issuer's signing key to the schema.
     const result = await this.agent.modules.anoncreds.registerCredentialDefinition({
       credentialDefinition: {
         issuerId: _params.issuerDid,
@@ -128,25 +82,13 @@ export class SchemaService {
     return { credentialDefinitionId }
   }
 
-  /**
-   * Optional companion to a revocation-enabled credential definition.
-   *
-   * Registers both the revocation registry definition and its initial status list.
-   *
-   * TODO(AD-71 test proof):
-   * After AD-69 and AD-68 are complete, prove this with a revocation-enabled
-   * credential definition and confirm both values are returned:
-   *   - revocationRegistryDefinitionId
-   *   - revocationStatusListTimestamp
-   * If `supportRevocation` was false on the credential definition, this should
-   * fail with a clear 4xx/422-style error rather than a vague internal error.
-   */
   async registerRevocationRegistry(_params: {
     issuerDid: string
     credentialDefinitionId: string
     tag: string
     maximumCredentialNumber: number
   }): Promise<{ revocationRegistryDefinitionId: string; revocationStatusListTimestamp: number }> {
+    // Revocation needs both a registry definition and the first status list.
     const result = await this.agent.modules.anoncreds.registerRevocationRegistryDefinition({
       revocationRegistryDefinition: {
         issuerId: _params.issuerDid,

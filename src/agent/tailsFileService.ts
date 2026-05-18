@@ -14,23 +14,6 @@ function localPathFromTailsLocation(tailsLocation: string | undefined): string |
   return fileURLToPath(tailsLocation)
 }
 
-/**
- * Publishes AnonCreds tails files for revocation-enabled credentials.
- *
- * Credo creates a tails file locally while registering a revocation registry.
- * Holders and verifiers must later download that file from the URL embedded in
- * the revocation registry definition, so this service copies Credo's generated
- * file into the configured public tails directory and returns a stable URL.
- *
- * Current PoC behavior:
- *   - files are stored on the local filesystem/container volume
- *   - Express serves them from `/tails/:tailsHash`
- *
- * TODO(production):
- * Move tails files to durable object storage or another public static host
- * before production. Container-local tails files are fine for Docker smoke
- * tests, but losing the volume would break future revocation checks.
- */
 export class LocalTailsFileService extends BasicTailsFileService {
   private readonly localTailsDirectoryPath: string
   private readonly tailsBaseUrl: string
@@ -73,9 +56,7 @@ export class LocalTailsFileService extends BasicTailsFileService {
     }
 
     if (sourcePath !== publishedPath && !(await fileSystem.exists(publishedPath))) {
-      // Keep the published filename equal to the tails hash. That makes the
-      // URL deterministic, cacheable, and easy to inspect during AD-71
-      // revocation setup tests.
+      // Keep the public filename equal to the tails hash so revocation URLs stay predictable.
       await fileSystem.copyFile(sourcePath, publishedPath)
     }
 

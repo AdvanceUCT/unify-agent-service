@@ -32,37 +32,15 @@ import { config } from '../config'
 import { indyNetworks } from './networks'
 import { LocalTailsFileService } from './tailsFileService'
 
-/**
- * Build the full set of Credo modules this agent needs.
- *
- * Why each module is registered (and not just left to defaults):
- *
- *  - askar:       encrypted wallet + key material storage
- *  - anoncreds:   AnonCreds credential format + proof format with the Indy
- *                 VDR registry so schemas / cred-defs resolve from BCovrin
- *  - indyVdr:     low-level Indy ledger client (ledger reads + writes)
- *  - dids:        DID resolution / registration (both for Indy DIDs)
- *  - connections: DIDComm connection protocol with autoAccept enabled so
- *                 the deep-link → wallet-handshake flow described in the
- *                 project context happens without admin intervention
- *  - credentials: V1 (legacy Indy) + V2 (AnonCreds) credential exchange
- *                 protocols, with autoAccept on content approval so the
- *                 university agent issues immediately once the wallet
- *                 accepts the offer
- *  - proofs:      V1 + V2 proof exchange (verification side, not used by
- *                 the issuer service today but cheap to keep registered)
- *
- * Returned as a const-shaped object so the resulting Agent type carries
- * the full module map (gives `agent.modules.anoncreds.registerSchema(...)`
- * and friends in IntelliSense).
- */
 export function buildAgentModules() {
   const legacyIndyCredentialFormatService = new LegacyIndyCredentialFormatService()
   const legacyIndyProofFormatService = new LegacyIndyProofFormatService()
 
   return {
+    // Askar owns the encrypted wallet and private key material.
     askar: new AskarModule({ ariesAskar }),
 
+    // AnonCreds needs the Indy registry so schema and cred-def ids resolve on BCovrin.
     anoncreds: new AnonCredsModule({
       anoncreds,
       registries: [new IndyVdrAnonCredsRegistry()],
@@ -82,6 +60,7 @@ export function buildAgentModules() {
       registrars: [new IndyVdrIndyDidRegistrar()],
     }),
 
+    // Auto-accept keeps the email deep-link flow moving without issuer-side clicks.
     connections: new ConnectionsModule({
       autoAcceptConnections: true,
     }),

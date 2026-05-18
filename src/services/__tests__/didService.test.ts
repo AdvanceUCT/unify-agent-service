@@ -3,11 +3,7 @@ import { KeyType } from '@credo-ts/core'
 import { AppError } from '../../errors'
 import { DidService } from '../didService'
 
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-/** Minimal public-key buffer that produces a deterministic verkey/DID. */
+// Keep the mock key deterministic so the generated DID is stable in tests.
 const MOCK_PUBLIC_KEY = Buffer.alloc(32, 0x01)
 
 function makeMockAgent(overrides: {
@@ -31,10 +27,6 @@ function makeMockAgent(overrides: {
     },
   }
 }
-
-// ---------------------------------------------------------------------------
-// getIssuerDid()
-// ---------------------------------------------------------------------------
 
 describe('DidService.getIssuerDid()', () => {
   it('returns null when the wallet has no Indy DIDs', async () => {
@@ -67,10 +59,6 @@ describe('DidService.getIssuerDid()', () => {
     expect((err as AppError).message).toMatch(/multiple issuer dids/i)
   })
 })
-
-// ---------------------------------------------------------------------------
-// createIssuerDid()
-// ---------------------------------------------------------------------------
 
 describe('DidService.createIssuerDid()', () => {
   beforeEach(() => {
@@ -141,7 +129,7 @@ describe('DidService.createIssuerDid()', () => {
 
     await service.createIssuerDid({})
 
-    // The fetch body should only contain role, alias, did, verkey — not the seed
+    // The fetch body should only contain role, alias, did, and verkey, not the seed.
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit]
     const body = JSON.parse(init.body as string)
     expect(Object.keys(body)).toEqual(expect.arrayContaining(['role', 'alias', 'did', 'verkey']))

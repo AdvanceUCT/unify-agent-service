@@ -46,6 +46,7 @@ function invitationIdFromUrl(invitationUrl: string, fallback: string) {
 }
 
 function activationUrlForToken(token: string): string {
+  // The student receives the tokenized app link, not the raw OOB invitation.
   return `${config.activations.walletActivationRoute}?${new URLSearchParams({ token }).toString()}`
 }
 
@@ -104,6 +105,7 @@ export class ActivationLinkService {
     })
     const invitationId = invitationIdFromUrl(offer.invitationUrl, `unify-oob-${suffixFor(activationId)}`)
     const expiresAt = expiresAtFrom(createdAt)
+    // Only the token hash is stored so a leaked activation store cannot open offers.
     const record: StoredActivationRecord = {
       activationId,
       createdAt: createdAt.toISOString(),
