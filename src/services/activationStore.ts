@@ -44,6 +44,8 @@ export class ActivationStore {
       activations.push(record)
     }
 
+   
+   
     await this.writeAll(activations)
   }
 

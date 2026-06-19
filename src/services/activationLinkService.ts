@@ -18,19 +18,6 @@ type StudentActivationInput = {
   externalId?: string
 }
 
-export type BatchActivationLinkResult = {
-  failures: Array<{ email?: string; externalId?: string; message: string }>
-  offers: Array<{
-    activationId: string
-    activationUrl: string
-    credentialExchangeId: string
-    outOfBandId: string
-    email?: string
-    expiresAt: string
-    externalId?: string
-  }>
-}
-
 function suffixFor(value: string) {
   return value.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'demo'
 }
