@@ -4,7 +4,16 @@ import type { RequestHandler } from 'express'
 import { config } from '../../config'
 
 function isPublicPath(path: string): boolean {
-  return path === '/health' || path.startsWith('/health/') || path.startsWith('/wallet/activation/')
+  return (
+    path === '/health' ||
+    path.startsWith('/health/') ||
+    path.startsWith('/wallet/activation/') ||
+    path === '/wallet/verification/sessions'
+  )
+}
+
+function isVerifierReadPath(path: string, method: string): boolean {
+  return method === 'GET' && path.startsWith('/verifier/')
 }
 
 function extractBearerToken(header: string | undefined): string | null {
@@ -33,7 +42,12 @@ export const apiKeyAuth: RequestHandler = (req, res, next) => {
   }
 
   const token = extractBearerToken(req.header('authorization'))
-  if (!token || !safeEqual(token, config.api.key)) {
+  const hasAgentAccess = token ? safeEqual(token, config.api.key) : false
+  const hasVerifierReadAccess = token
+    ? safeEqual(token, config.verifier.apiKey) && isVerifierReadPath(req.path, req.method)
+    : false
+
+  if (!hasAgentAccess && !hasVerifierReadAccess) {
     // Keep the response vague so callers cannot tell which part was wrong.
     res.status(401).json({ error: { message: 'Missing or invalid API key.' } })
     return

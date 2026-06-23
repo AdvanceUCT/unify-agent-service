@@ -33,6 +33,7 @@ The service features:
 - **Student Activation Links** - Creates short-lived tokenized links for email delivery
 - **DIDComm Messaging** - Runs inbound and outbound transports for wallet handshakes
 - **Webhook Events** - Sends connection and credential state changes back to the Admin Portal
+- **AnonCreds Verification** - Creates service-point proof requests and verifies student presentations
 - **Docker Development** - Runs the native Credo dependencies in a Linux container
 
 ---
@@ -180,7 +181,34 @@ DIDComm URL when testing with a real phone.
    ```
 
    This removes the persisted `agent-data` Docker volume and clears stale DID,
-   schema, credential definition, and activation-link data.
+   schema, credential definition, activation-link, and verification-session data.
+
+---
+
+## AnonCreds Verification API
+
+The same Credo agent can act as the verifier for static service-point QR codes.
+Configure a separate Vendor Portal key and the credential definitions that the
+verifier is allowed to trust:
+
+```env
+VERIFIER_API_KEY=replace-with-a-separate-vendor-secret
+VERIFIER_TRUSTED_CREDENTIAL_DEFINITION_IDS=did:indy:bcovrin:test:.../CLAIM_DEF/...
+VERIFICATION_PUBLIC_BASE_URL=https://voskuils.com
+```
+
+An administrator registers a service point with `POST /api/verifier/service-points`.
+The returned `verificationUrl` is stable and can be printed as a permanent QR.
+Each wallet scan calls `POST /api/wallet/verification/sessions`, which creates a
+fresh five-minute Credo proof request rather than reusing proof material from the
+QR. Vendor servers read the live result through the protected verifier endpoints.
+
+The verifier requests `studentNumber`, `enrolmentStatus`, `faculty`, and
+`programme`. A proof is approved only when Credo verifies it, its credential
+definition is allowlisted, all fields are present, and the status is `Registered`.
+
+Verification metadata is stored under `/home/node/.afj` and is therefore covered
+by the existing `agent-data` Docker volume. No extra container or port is needed.
 
 ---
 

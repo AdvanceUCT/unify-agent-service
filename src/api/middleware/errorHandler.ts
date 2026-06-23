@@ -22,6 +22,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   res.status(status).json({
     error: {
       message,
+      ...((err as { code?: unknown }).code ? { code: (err as { code: string }).code } : {}),
       ...(err instanceof CredoError ? { kind: 'CredoError' } : {}),
       ...((err as { details?: unknown }).details !== undefined
         ? { details: (err as { details: unknown }).details }

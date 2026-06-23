@@ -9,7 +9,9 @@ import { buildHealthRouter } from './health'
 import { buildIssuanceRouter } from './issuance'
 import { buildSchemasRouter } from './schemas'
 import { buildStatusRouter } from './status'
+import { buildVerifierRouter } from './verifier'
 import { buildWalletActivationRouter } from './walletActivation'
+import { buildWalletVerificationRouter } from './walletVerification'
 
 export function buildApiRouter(agent: UniversityAgent): Router {
   const router = Router()
@@ -22,7 +24,9 @@ export function buildApiRouter(agent: UniversityAgent): Router {
   router.use('/', buildSchemasRouter(agent))
   router.use('/connections', buildConnectionsRouter(agent))
   router.use('/credentials', buildCredentialsRouter(agent))
+  router.use('/verifier', buildVerifierRouter(agent))
   router.use('/wallet/activation', buildWalletActivationRouter(agent))
+  router.use('/wallet/verification', buildWalletVerificationRouter(agent))
 
   return router
 }

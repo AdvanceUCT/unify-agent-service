@@ -13,7 +13,8 @@ services:
       # Credo's NodeFileSystem writes the encrypted Askar wallet under
       # `${HOME}/.afj/data` (and cache under `${HOME}/.afj/cache`). For the
       # unprivileged `node` user this resolves to /home/node/.afj. Mounting
-      # the whole .afj directory keeps wallet state across container rebuilds.
+      # the whole .afj directory keeps wallet, activation, and verification
+      # state across container rebuilds.
       - agent-data:/home/node/.afj
     restart: unless-stopped
 
