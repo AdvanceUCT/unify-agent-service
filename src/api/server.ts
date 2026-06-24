@@ -11,6 +11,8 @@ import { buildApiRouter } from './routes'
 export function createApiServer(agent: UniversityAgent): Express {
   const app = express()
 
+  // Caddy is the only production proxy in front of this service.
+  app.set('trust proxy', 1)
   app.use(express.json())
   app.use(requestLogger)
 

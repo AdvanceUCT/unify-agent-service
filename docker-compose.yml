@@ -9,11 +9,15 @@ services:
       - "${AGENT_PORT:-3001}:${AGENT_PORT:-3001}"
     env_file:
       - .env
+    environment:
+      # Compose reads this from the project .env; deployments must override the dev fallback.
+      VERIFICATION_RESULT_TOKEN_SECRET: "${VERIFICATION_RESULT_TOKEN_SECRET:-dev-verification-result-token-secret}"
     volumes:
       # Credo's NodeFileSystem writes the encrypted Askar wallet under
       # `${HOME}/.afj/data` (and cache under `${HOME}/.afj/cache`). For the
       # unprivileged `node` user this resolves to /home/node/.afj. Mounting
-      # the whole .afj directory keeps wallet state across container rebuilds.
+      # the whole .afj directory keeps wallet, activation, and verification
+      # state across container rebuilds.
       - agent-data:/home/node/.afj
     restart: unless-stopped
 

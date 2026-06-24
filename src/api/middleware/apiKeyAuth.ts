@@ -4,7 +4,22 @@ import type { RequestHandler } from 'express'
 import { config } from '../../config'
 
 function isPublicPath(path: string): boolean {
-  return path === '/health' || path.startsWith('/health/') || path.startsWith('/wallet/activation/')
+  return (
+    path === '/health' ||
+    path.startsWith('/health/') ||
+    path.startsWith('/wallet/activation/')
+  )
+}
+
+function isPublicWalletVerificationPath(path: string, method: string): boolean {
+  return (
+    (method === 'POST' && path === '/wallet/verification/sessions') ||
+    (method === 'GET' && /^\/wallet\/verification\/sessions\/[^/]+$/.test(path))
+  )
+}
+
+function isVerifierReadPath(path: string, method: string): boolean {
+  return method === 'GET' && path.startsWith('/verifier/')
 }
 
 function extractBearerToken(header: string | undefined): string | null {
@@ -27,13 +42,18 @@ function safeEqual(left: string, right: string): boolean {
 
 export const apiKeyAuth: RequestHandler = (req, res, next) => {
   // Health checks and student activation resolve cannot depend on the Admin Portal key.
-  if (isPublicPath(req.path)) {
+  if (isPublicPath(req.path) || isPublicWalletVerificationPath(req.path, req.method)) {
     next()
     return
   }
 
   const token = extractBearerToken(req.header('authorization'))
-  if (!token || !safeEqual(token, config.api.key)) {
+  const hasAgentAccess = token ? safeEqual(token, config.api.key) : false
+  const hasVerifierReadAccess = token
+    ? safeEqual(token, config.verifier.apiKey) && isVerifierReadPath(req.path, req.method)
+    : false
+
+  if (!hasAgentAccess && !hasVerifierReadAccess) {
     // Keep the response vague so callers cannot tell which part was wrong.
     res.status(401).json({ error: { message: 'Missing or invalid API key.' } })
     return

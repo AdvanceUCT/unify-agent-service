@@ -30,6 +30,22 @@ function parsePositiveInteger(name: string, fallback: number): number {
   return parsed
 }
 
+function parseBoolean(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]
+  if (!raw) return fallback
+
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  throw new Error(`Environment variable ${name} must be either "true" or "false" (got "${raw}")`)
+}
+
+function parseCsv(name: string): string[] {
+  const raw = process.env[name]
+  if (!raw) return []
+
+  return [...new Set(raw.split(',').map((value) => value.trim()).filter(Boolean))]
+}
+
 function withoutTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
 }
@@ -52,6 +68,23 @@ export const config = {
     port: apiPort,
     // The fallback is only for local development; deployments must set this explicitly.
     key: requireEnv('AGENT_API_KEY', 'dev-agent-api-key'),
+  },
+  verifier: {
+    apiKey: requireEnv('VERIFIER_API_KEY', 'dev-verifier-api-key'),
+    resultTokenSecret: requireEnv(
+      'VERIFICATION_RESULT_TOKEN_SECRET',
+      'dev-verification-result-token-secret',
+    ),
+    trustedCredentialDefinitionIds: parseCsv('VERIFIER_TRUSTED_CREDENTIAL_DEFINITION_IDS'),
+    storeFile: requireEnv('VERIFICATION_STORE_FILE', join(homedir(), '.afj', 'verification-requests.json')),
+    publicBaseUrl: withoutTrailingSlash(requireEnv('VERIFICATION_PUBLIC_BASE_URL', 'http://localhost:3000')),
+    sessionTtlMinutes: parsePositiveInteger('VERIFICATION_SESSION_TTL_MINUTES', 5),
+    resultVisibilityMinutes: parsePositiveInteger('VERIFICATION_RESULT_VISIBILITY_MINUTES', 15),
+    requireNonRevoked: parseBoolean('VERIFIER_REQUIRE_NON_REVOKED', false),
+    label: requireEnv('VERIFIER_LABEL', 'UNIFY Student Verifier'),
+    rateLimitPerIp: parsePositiveInteger('VERIFICATION_RATE_LIMIT_PER_IP', 5),
+    rateLimitPerServicePoint: parsePositiveInteger('VERIFICATION_RATE_LIMIT_PER_SERVICE_POINT', 30),
+    maxPendingPerServicePoint: parsePositiveInteger('VERIFICATION_MAX_PENDING_PER_SERVICE_POINT', 20),
   },
   tails: {
     directory: requireEnv('TAILS_DIRECTORY', join(homedir(), '.afj', 'tails')),

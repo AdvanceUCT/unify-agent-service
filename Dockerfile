@@ -46,7 +46,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/genesis ./genesis
 
-# Credo writes the encrypted Askar wallet + cache under ${HOME}/.afj. For the
+# Credo writes the encrypted Askar wallet, cache, and verification metadata
+# under ${HOME}/.afj. For the
 # unprivileged `node` user that ships with the official Node images this
 # resolves to /home/node/.afj. We pre-create the directory with the right
 # owner so the docker-compose volume mount inherits sensible permissions.

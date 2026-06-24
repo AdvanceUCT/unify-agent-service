@@ -21,7 +21,24 @@ export type CredentialStateChangedWebhookPayload = {
   type: 'credential.stateChanged'
 }
 
-export type WebhookPayload = ConnectionStateChangedWebhookPayload | CredentialStateChangedWebhookPayload
+export type ProofStateChangedWebhookPayload = {
+  verificationRequestId: string
+  proofRecordId: string
+  vendorId: string
+  servicePointId: string
+  previousState: string | null
+  state: string
+  isVerified?: boolean
+  decision: string
+  failureCode?: string
+  timestamp: string
+  type: 'proof.stateChanged'
+}
+
+export type WebhookPayload =
+  | ConnectionStateChangedWebhookPayload
+  | CredentialStateChangedWebhookPayload
+  | ProofStateChangedWebhookPayload
 
 type FetchLike = (
   url: string,

@@ -4,13 +4,16 @@ import { createAgent } from './agent'
 import { createApiServer } from './api/server'
 import { config } from './config'
 import { registerAgentEventHandlers } from './events'
+import { startVerificationCleanup } from './services/verificationCleanup'
 
 async function main(): Promise<void> {
   const agent = await createAgent()
   console.log(`[agent] initialised — label="${agent.config.label}"`)
 
   registerAgentEventHandlers(agent)
-  console.log('[events] handlers registered (connection, credential)')
+  console.log('[events] handlers registered (connection, credential, proof)')
+
+  const verificationCleanupTimer = startVerificationCleanup(agent)
 
   const app = createApiServer(agent)
 
@@ -23,6 +26,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: NodeJS.Signals) => {
     console.log(`\n[shutdown] received ${signal}, closing agent...`)
     try {
+      clearInterval(verificationCleanupTimer)
       await agent.shutdown()
       process.exit(0)
     } catch (err) {

@@ -95,4 +95,26 @@ describe('dispatchWebhook', () => {
       '[events] webhook credential.stateChanged dispatch failed: network offline',
     )
   })
+
+  it('dispatches proof results without requiring revealed student attributes', async () => {
+    const fetchFn = jest.fn().mockResolvedValue({ ok: true, status: 202 })
+    const proofPayload: WebhookPayload = {
+      verificationRequestId: 'verification-001',
+      proofRecordId: 'proof-001',
+      vendorId: 'vendor-001',
+      servicePointId: 'service-point-001',
+      previousState: 'presentation-received',
+      state: 'done',
+      isVerified: true,
+      decision: 'Approved',
+      timestamp: '2026-06-23T10:00:00.000Z',
+      type: 'proof.stateChanged',
+    }
+
+    await dispatchWebhook(proofPayload, { fetchFn, url: 'https://admin.example.test/api/webhooks/agent' })
+
+    const body = String(fetchFn.mock.calls[0][1].body)
+    expect(body).toContain('verification-001')
+    expect(body).not.toContain('studentNumber')
+  })
 })
