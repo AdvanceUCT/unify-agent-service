@@ -7,8 +7,14 @@ function isPublicPath(path: string): boolean {
   return (
     path === '/health' ||
     path.startsWith('/health/') ||
-    path.startsWith('/wallet/activation/') ||
-    path === '/wallet/verification/sessions'
+    path.startsWith('/wallet/activation/')
+  )
+}
+
+function isPublicWalletVerificationPath(path: string, method: string): boolean {
+  return (
+    (method === 'POST' && path === '/wallet/verification/sessions') ||
+    (method === 'GET' && /^\/wallet\/verification\/sessions\/[^/]+$/.test(path))
   )
 }
 
@@ -36,7 +42,7 @@ function safeEqual(left: string, right: string): boolean {
 
 export const apiKeyAuth: RequestHandler = (req, res, next) => {
   // Health checks and student activation resolve cannot depend on the Admin Portal key.
-  if (isPublicPath(req.path)) {
+  if (isPublicPath(req.path) || isPublicWalletVerificationPath(req.path, req.method)) {
     next()
     return
   }

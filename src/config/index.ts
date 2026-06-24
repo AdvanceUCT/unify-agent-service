@@ -71,6 +71,10 @@ export const config = {
   },
   verifier: {
     apiKey: requireEnv('VERIFIER_API_KEY', 'dev-verifier-api-key'),
+    resultTokenSecret: requireEnv(
+      'VERIFICATION_RESULT_TOKEN_SECRET',
+      'dev-verification-result-token-secret',
+    ),
     trustedCredentialDefinitionIds: parseCsv('VERIFIER_TRUSTED_CREDENTIAL_DEFINITION_IDS'),
     storeFile: requireEnv('VERIFICATION_STORE_FILE', join(homedir(), '.afj', 'verification-requests.json')),
     publicBaseUrl: withoutTrailingSlash(requireEnv('VERIFICATION_PUBLIC_BASE_URL', 'http://localhost:3000')),

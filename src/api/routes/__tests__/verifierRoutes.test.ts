@@ -113,6 +113,7 @@ describe('wallet verification routes', () => {
   it('starts a session with validated wallet identifiers', async () => {
     const service = {
       startSession: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001' }),
+      getWalletResult: jest.fn(),
     }
     const router = buildWalletVerificationRouter({} as never, service)
 
@@ -135,7 +136,7 @@ describe('wallet verification routes', () => {
   })
 
   it('rejects malformed wallet requests before creating a proof', async () => {
-    const service = { startSession: jest.fn() }
+    const service = { startSession: jest.fn(), getWalletResult: jest.fn() }
     const router = buildWalletVerificationRouter({} as never, service as never)
 
     await withServer(router, async (baseUrl) => {
@@ -147,6 +148,27 @@ describe('wallet verification routes', () => {
 
       expect(response.status).toBe(400)
       expect(service.startSession).not.toHaveBeenCalled()
+    })
+  })
+
+  it('forwards the result capability without exposing verifier credentials', async () => {
+    const service = {
+      startSession: jest.fn(),
+      getWalletResult: jest.fn().mockResolvedValue({ status: 'Pending', expiresAt: '2026-06-23T10:05:00.000Z' }),
+    }
+    const router = buildWalletVerificationRouter({} as never, service)
+
+    await withServer(router, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions/verification-001`, {
+        headers: { Authorization: 'Bearer wallet-result-token' },
+      })
+
+      expect(response.status).toBe(200)
+      expect(service.getWalletResult).toHaveBeenCalledWith('verification-001', 'wallet-result-token')
+      await expect(response.json()).resolves.toEqual({
+        status: 'Pending',
+        expiresAt: '2026-06-23T10:05:00.000Z',
+      })
     })
   })
 })

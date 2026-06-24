@@ -84,6 +84,7 @@ describe('VerificationService', () => {
     return new VerificationService(agent as never, store, {
       now: () => now,
       trustedCredentialDefinitionIds: ['cred-def-001'],
+      resultTokenSecret: 'test-result-token-secret',
       rateLimiter: new VerificationRateLimiter({ perIp: 100, perServicePoint: 100 }),
       ...overrides,
     })
@@ -194,8 +195,89 @@ describe('VerificationService', () => {
     const second = await service.startSession(input)
 
     expect(second.verificationRequestId).toBe(first.verificationRequestId)
+    expect(second.resultToken).toBe(first.resultToken)
     expect(agent.proofs.createRequest).toHaveBeenCalledTimes(1)
     expect(agent.oob.getById).toHaveBeenCalledWith('oob-001')
+  })
+
+  it('returns only wallet-safe result fields for a valid capability', async () => {
+    const agentState = makeAgent()
+    const service = serviceFor(agentState.agent)
+    const point = await registeredPoint(service)
+    const started = await service.startSession({
+      publicServicePointId: point.publicId,
+      clientRequestId: 'client-001',
+      requestIp: '192.0.2.1',
+    })
+    agentState.setProofRecord({ state: 'done', isVerified: true })
+
+    const result = await service.getWalletResult(started.verificationRequestId, started.resultToken)
+
+    expect(result).toEqual({
+      status: 'Approved',
+      expiresAt: started.expiresAt,
+      completedAt: '2026-06-23T10:00:00.000Z',
+    })
+    expect(result).not.toHaveProperty('attributes')
+    expect(result).not.toHaveProperty('vendorId')
+    expect(result).not.toHaveProperty('proofRecordId')
+  })
+
+  it.each([undefined, 'wrong-token'])('rejects a missing or invalid result capability', async (token) => {
+    const { agent } = makeAgent()
+    const service = serviceFor(agent)
+    const point = await registeredPoint(service)
+    const started = await service.startSession({
+      publicServicePointId: point.publicId,
+      clientRequestId: 'client-001',
+      requestIp: '192.0.2.1',
+    })
+
+    await expect(service.getWalletResult(started.verificationRequestId, token)).rejects.toMatchObject({
+      status: 401,
+      code: 'INVALID_VERIFICATION_RESULT_TOKEN',
+    })
+  })
+
+  it('expires the result capability after the visibility window', async () => {
+    const agentState = makeAgent()
+    const service = serviceFor(agentState.agent)
+    const point = await registeredPoint(service)
+    const started = await service.startSession({
+      publicServicePointId: point.publicId,
+      clientRequestId: 'client-001',
+      requestIp: '192.0.2.1',
+    })
+    agentState.setProofRecord({ state: 'done', isVerified: true })
+    await service.getWalletResult(started.verificationRequestId, started.resultToken)
+
+    now = new Date('2026-06-23T10:16:00.000Z')
+
+    await expect(
+      service.getWalletResult(started.verificationRequestId, started.resultToken),
+    ).rejects.toMatchObject({ status: 410, code: 'VERIFICATION_RESULT_EXPIRED' })
+  })
+
+  it('does not reopen visibility when an expired session is first polled late', async () => {
+    const { agent } = makeAgent()
+    const service = serviceFor(agent, { sessionTtlMinutes: 5, resultVisibilityMinutes: 15 })
+    const point = await registeredPoint(service)
+    const started = await service.startSession({
+      publicServicePointId: point.publicId,
+      clientRequestId: 'client-001',
+      requestIp: '192.0.2.1',
+    })
+
+    now = new Date('2026-06-23T10:21:00.000Z')
+
+    await expect(
+      service.getWalletResult(started.verificationRequestId, started.resultToken),
+    ).rejects.toMatchObject({ status: 410, code: 'VERIFICATION_RESULT_EXPIRED' })
+    await expect(store.findSessionById(started.verificationRequestId)).resolves.toMatchObject({
+      decision: 'Expired',
+      completedAt: '2026-06-23T10:05:00.000Z',
+      detailsVisibleUntil: '2026-06-23T10:20:00.000Z',
+    })
   })
 
   it('rejects session creation when the trusted allowlist is empty', async () => {

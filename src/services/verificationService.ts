@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import type { ProofExchangeRecord } from '@credo-ts/core'
 
@@ -56,6 +56,7 @@ type VerificationServiceOptions = {
   sessionTtlMinutes?: number
   resultVisibilityMinutes?: number
   maxPendingPerServicePoint?: number
+  resultTokenSecret?: string
 }
 
 function generateId(prefix: string, bytes = 12): string {
@@ -78,6 +79,7 @@ export class VerificationService {
   private readonly sessionTtlMinutes: number
   private readonly resultVisibilityMinutes: number
   private readonly maxPendingPerServicePoint: number
+  private readonly resultTokenSecret: string
   private creationQueue: Promise<void> = Promise.resolve()
 
   constructor(
@@ -93,6 +95,7 @@ export class VerificationService {
     this.resultVisibilityMinutes = options.resultVisibilityMinutes ?? config.verifier.resultVisibilityMinutes
     this.maxPendingPerServicePoint =
       options.maxPendingPerServicePoint ?? config.verifier.maxPendingPerServicePoint
+    this.resultTokenSecret = options.resultTokenSecret ?? config.verifier.resultTokenSecret
     this.rateLimiter =
       options.rateLimiter ??
       new VerificationRateLimiter({
@@ -166,6 +169,7 @@ export class VerificationService {
     servicePointName: string
     requestedAttributes: readonly string[]
     expiresAt: string
+    resultToken: string
   }> {
     return this.withCreationLock(async () => {
       const servicePoint = await this.store.findServicePointByPublicId(input.publicServicePointId)
@@ -274,6 +278,43 @@ export class VerificationService {
     })
   }
 
+  async getWalletResult(
+    verificationRequestId: string,
+    resultToken: string | undefined,
+  ): Promise<{
+    status: VerificationDecision
+    failureCode?: VerificationFailureCode
+    expiresAt: string
+    completedAt?: string
+  }> {
+    this.assertResultToken(verificationRequestId, resultToken)
+
+    const session = await this.store.findSessionById(verificationRequestId)
+    if (!session) {
+      throw new AppError(404, 'Verification request was not found.', undefined, 'VERIFICATION_REQUEST_NOT_FOUND')
+    }
+
+    const status = await this.syncSession(session)
+    const latest = await this.store.findSessionById(verificationRequestId)
+    const visibleUntil = latest?.detailsVisibleUntil
+
+    if (visibleUntil && this.now().getTime() >= new Date(visibleUntil).getTime()) {
+      throw new AppError(
+        410,
+        'The verification result is no longer available.',
+        undefined,
+        'VERIFICATION_RESULT_EXPIRED',
+      )
+    }
+
+    return {
+      status: status.status,
+      ...(status.failureCode ? { failureCode: status.failureCode } : {}),
+      expiresAt: status.expiresAt,
+      ...(status.completedAt ? { completedAt: status.completedAt } : {}),
+    }
+  }
+
   async getStatus(id: string): Promise<VerificationStatusResult> {
     const session = await this.store.findSessionById(id)
     if (!session) {
@@ -373,9 +414,10 @@ export class VerificationService {
     })
 
     const becameTerminal = isTerminal(evaluation.decision) && !session.completedAt
-    const completedAt = becameTerminal ? this.now().toISOString() : session.completedAt
+    const terminalAt = expired ? new Date(session.expiresAt) : this.now()
+    const completedAt = becameTerminal ? terminalAt.toISOString() : session.completedAt
     const detailsVisibleUntil = becameTerminal
-      ? addMinutes(this.now(), this.resultVisibilityMinutes).toISOString()
+      ? addMinutes(terminalAt, this.resultVisibilityMinutes).toISOString()
       : session.detailsVisibleUntil
 
     const updated = await this.store.updateSession(session.verificationRequestId, (record) => ({
@@ -481,6 +523,30 @@ export class VerificationService {
       servicePointName: servicePoint.name,
       requestedAttributes: VERIFICATION_ATTRIBUTES,
       expiresAt: session.expiresAt,
+      resultToken: this.resultTokenFor(session.verificationRequestId),
+    }
+  }
+
+  private resultTokenFor(verificationRequestId: string): string {
+    return createHmac('sha256', this.resultTokenSecret)
+      .update(`wallet-verification-result:${verificationRequestId}`)
+      .digest('base64url')
+  }
+
+  private assertResultToken(verificationRequestId: string, suppliedToken: string | undefined): void {
+    const expectedToken = this.resultTokenFor(verificationRequestId)
+    const suppliedBuffer = Buffer.from(suppliedToken ?? '')
+    const expectedBuffer = Buffer.from(expectedToken)
+    const valid =
+      suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer)
+
+    if (!valid) {
+      throw new AppError(
+        401,
+        'Missing or invalid verification result token.',
+        undefined,
+        'INVALID_VERIFICATION_RESULT_TOKEN',
+      )
     }
   }
 

@@ -5,7 +5,13 @@ import { VerificationService } from '../../services/verificationService'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireObject, requireString } from '../validation'
 
-type WalletVerificationRouteService = Pick<VerificationService, 'startSession'>
+type WalletVerificationRouteService = Pick<VerificationService, 'getWalletResult' | 'startSession'>
+
+function bearerToken(header: string | undefined): string | undefined {
+  if (!header) return undefined
+  const [scheme, token, extra] = header.trim().split(/\s+/)
+  return scheme?.toLowerCase() === 'bearer' && token && !extra ? token : undefined
+}
 
 export function buildWalletVerificationRouter(
   agent: UniversityAgent,
@@ -23,6 +29,17 @@ export function buildWalletVerificationRouter(
         requestIp: req.ip || req.socket.remoteAddress || 'unknown',
       })
       res.status(201).json(result)
+    }),
+  )
+
+  router.get(
+    '/sessions/:verificationRequestId',
+    asyncHandler(async (req, res) => {
+      const result = await verifier.getWalletResult(
+        req.params.verificationRequestId,
+        bearerToken(req.header('authorization')),
+      )
+      res.json(result)
     }),
   )
 

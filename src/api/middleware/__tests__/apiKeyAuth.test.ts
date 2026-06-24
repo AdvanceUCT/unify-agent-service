@@ -53,6 +53,35 @@ describe('apiKeyAuth', () => {
     expect(res.status).not.toHaveBeenCalled()
   })
 
+  it('allows only the exact wallet result read route without an API key', () => {
+    const allowed = makeRequest('/wallet/verification/sessions/verification-001', undefined, 'GET')
+    const wrongMethod = makeRequest('/wallet/verification/sessions/verification-001', undefined, 'DELETE')
+    const nested = makeRequest('/wallet/verification/sessions/verification-001/details', undefined, 'GET')
+
+    const allowedNext = jest.fn()
+    apiKeyAuth(allowed as never, makeResponse() as never, allowedNext)
+    expect(allowedNext).toHaveBeenCalled()
+
+    for (const request of [wrongMethod, nested]) {
+      const response = makeResponse()
+      const next = jest.fn()
+      apiKeyAuth(request as never, response as never, next)
+      expect(next).not.toHaveBeenCalled()
+      expect(response.status).toHaveBeenCalledWith(401)
+    }
+  })
+
+  it('does not expose session creation on GET', () => {
+    const req = makeRequest('/wallet/verification/sessions', undefined, 'GET')
+    const res = makeResponse()
+    const next = jest.fn()
+
+    apiKeyAuth(req as never, res as never, next)
+
+    expect(next).not.toHaveBeenCalled()
+    expect(res.status).toHaveBeenCalledWith(401)
+  })
+
   it('rejects protected routes with a missing token', () => {
     const req = makeRequest('/status')
     const res = makeResponse()
