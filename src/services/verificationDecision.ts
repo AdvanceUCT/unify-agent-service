@@ -60,14 +60,5 @@ export function evaluateVerification(input: VerificationDecisionInput): Verifica
     return { decision: 'Declined', failureCode: 'REQUIRED_ATTRIBUTE_MISSING' }
   }
 
-  const completeAttributes = attributes as RevealedVerificationAttributes
-  if (completeAttributes.enrolmentStatus !== 'Registered') {
-    return {
-      decision: 'Declined',
-      failureCode: 'STUDENT_NOT_REGISTERED',
-      attributes: completeAttributes,
-    }
-  }
-
-  return { decision: 'Approved', attributes: completeAttributes }
+  return { decision: 'Approved', attributes: attributes as RevealedVerificationAttributes }
 }

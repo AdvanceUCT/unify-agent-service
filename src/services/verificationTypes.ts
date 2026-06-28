@@ -1,8 +1,7 @@
 export const VERIFICATION_ATTRIBUTES = [
   'studentNumber',
-  'enrolmentStatus',
   'faculty',
-  'programme',
+  'year',
 ] as const
 
 export type VerificationAttributeName = (typeof VERIFICATION_ATTRIBUTES)[number]
