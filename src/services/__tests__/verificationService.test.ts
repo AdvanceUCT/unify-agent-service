@@ -8,9 +8,8 @@ import { VerificationStore } from '../verificationStore'
 
 const revealedAttributes = {
   studentNumber: { raw: 'VOSCAL100', encoded: '1' },
-  enrolmentStatus: { raw: 'Registered', encoded: '2' },
-  faculty: { raw: 'Commerce', encoded: '3' },
-  programme: { raw: 'Business Science', encoded: '4' },
+  faculty: { raw: 'Commerce', encoded: '2' },
+  year: { raw: '2026', encoded: '3' },
 }
 
 function makeAgent() {
@@ -122,7 +121,7 @@ describe('VerificationService', () => {
           anoncreds: expect.objectContaining({
             requested_attributes: {
               student_details: {
-                names: ['studentNumber', 'enrolmentStatus', 'faculty', 'programme'],
+                names: ['studentNumber', 'faculty', 'year'],
                 restrictions: [{ cred_def_id: 'cred-def-001' }],
               },
             },
@@ -330,7 +329,7 @@ describe('VerificationService', () => {
     ).rejects.toMatchObject({ code: 'CREDO_PROTOCOL_ERROR' })
   })
 
-  it('returns Approved with the four verified attributes', async () => {
+  it('returns Approved with the three verified attributes', async () => {
     const agentState = makeAgent()
     const service = serviceFor(agentState.agent)
     const point = await registeredPoint(service)
@@ -348,9 +347,8 @@ describe('VerificationService', () => {
       isVerified: true,
       attributes: {
         studentNumber: 'VOSCAL100',
-        enrolmentStatus: 'Registered',
         faculty: 'Commerce',
-        programme: 'Business Science',
+        year: '2026',
       },
     })
   })

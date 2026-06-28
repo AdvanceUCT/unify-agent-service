@@ -2,9 +2,8 @@ import { evaluateVerification } from '../verificationDecision'
 
 const attributes = {
   studentNumber: 'VOSCAL100',
-  enrolmentStatus: 'Registered',
   faculty: 'Commerce',
-  programme: 'Business Science',
+  year: '2026',
 }
 
 const validInput = {
@@ -16,17 +15,8 @@ const validInput = {
 }
 
 describe('evaluateVerification', () => {
-  it('approves a cryptographically verified Registered student', () => {
+  it('approves a cryptographically verified student credential', () => {
     expect(evaluateVerification(validInput)).toEqual({ decision: 'Approved', attributes })
-  })
-
-  it('declines a valid proof for a non-Registered student', () => {
-    expect(
-      evaluateVerification({
-        ...validInput,
-        attributes: { ...attributes, enrolmentStatus: 'Suspended' },
-      }),
-    ).toMatchObject({ decision: 'Declined', failureCode: 'STUDENT_NOT_REGISTERED' })
   })
 
   it('declines a proof Credo did not verify', () => {
@@ -36,7 +26,7 @@ describe('evaluateVerification', () => {
     })
   })
 
-  it.each(['studentNumber', 'enrolmentStatus', 'faculty', 'programme'] as const)(
+  it.each(['studentNumber', 'faculty', 'year'] as const)(
     'identifies a missing %s attribute',
     (name) => {
       const incomplete = { ...attributes }

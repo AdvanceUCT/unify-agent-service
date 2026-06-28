@@ -210,7 +210,7 @@ export class VerificationService {
 
       const proofFormats = {
         anoncreds: {
-          name: 'UNIFY Active Student Verification',
+          name: 'UNIFY Student Credential Verification',
           version: '1.0',
           requested_attributes: {
             student_details: {
@@ -233,7 +233,7 @@ export class VerificationService {
         const created = await this.agent.proofs.createRequest({
           protocolVersion: 'v2',
           proofFormats,
-          comment: `Verify active student access for ${servicePoint.name}`,
+          comment: `Verify a student credential for ${servicePoint.name}`,
         })
         proofRecord = created.proofRecord
         message = created.message

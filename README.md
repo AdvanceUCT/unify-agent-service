@@ -203,9 +203,11 @@ Each wallet scan calls `POST /api/wallet/verification/sessions`, which creates a
 fresh five-minute Credo proof request rather than reusing proof material from the
 QR. Vendor servers read the live result through the protected verifier endpoints.
 
-The verifier requests `studentNumber`, `enrolmentStatus`, `faculty`, and
-`programme`. A proof is approved only when Credo verifies it, its credential
-definition is allowlisted, all fields are present, and the status is `Registered`.
+The verifier requests `studentNumber`, `faculty`, and `year`, matching the
+existing `StudentIdentity` credential schema. A proof is approved only when
+Credo verifies it, its credential definition is allowlisted, and all requested
+fields are present. This verifies a trusted student credential, not current
+enrolment status.
 
 Verification metadata is stored under `/home/node/.afj` and is therefore covered
 by the existing `agent-data` Docker volume. No extra container or port is needed.
