@@ -8,7 +8,14 @@ import { optionalBoolean, optionalString, requireObject, requireString } from '.
 
 type VerifierRouteService = Pick<
   VerificationService,
-  'createServicePoint' | 'listServicePoints' | 'listSessions' | 'getServicePoint' | 'updateServicePoint' | 'getStatus'
+  | 'createServicePoint'
+  | 'getServicePoint'
+  | 'getStatus'
+  | 'listServicePoints'
+  | 'listSessions'
+  | 'listTrustedCredentialDefinitions'
+  | 'registerTrustedCredentialDefinition'
+  | 'updateServicePoint'
 >
 
 export function buildVerifierRouter(
@@ -26,6 +33,26 @@ export function buildVerifierRouter(
         vendorName: requireString(body, 'vendorName'),
         externalId: requireString(body, 'externalId'),
         name: requireString(body, 'name'),
+        credentialDefinitionId: optionalString(body, 'credentialDefinitionId'),
+      })
+      res.status(201).json(result)
+    }),
+  )
+
+  router.get(
+    '/credential-definitions',
+    asyncHandler(async (_req, res) => {
+      res.json(await verifier.listTrustedCredentialDefinitions())
+    }),
+  )
+
+  router.post(
+    '/credential-definitions',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body)
+      const result = await verifier.registerTrustedCredentialDefinition({
+        credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
+        makeDefault: optionalBoolean(body, 'makeDefault'),
       })
       res.status(201).json(result)
     }),
@@ -59,11 +86,24 @@ export function buildVerifierRouter(
       const name = optionalString(body, 'name')
       const vendorName = optionalString(body, 'vendorName')
       const active = optionalBoolean(body, 'active')
-      if (name === undefined && vendorName === undefined && active === undefined) {
-        throw new AppError(400, 'Provide name, vendorName, or active to update.', undefined, 'EMPTY_UPDATE')
+      const credentialDefinitionId = optionalString(body, 'credentialDefinitionId')
+      if (name === undefined && vendorName === undefined && active === undefined && credentialDefinitionId === undefined) {
+        throw new AppError(
+          400,
+          'Provide name, vendorName, active, or credentialDefinitionId to update.',
+          undefined,
+          'EMPTY_UPDATE',
+        )
       }
 
-      res.json(await verifier.updateServicePoint(req.params.id, { name, vendorName, active }))
+      res.json(
+        await verifier.updateServicePoint(req.params.id, {
+          name,
+          vendorName,
+          active,
+          credentialDefinitionId,
+        }),
+      )
     }),
   )
 

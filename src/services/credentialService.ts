@@ -1,8 +1,14 @@
 import type { UniversityAgent } from '../agent'
 import { config } from '../config'
+import { AppError } from '../errors'
+
+import { RevocationIndexStore } from './revocationIndexStore'
 
 export class CredentialService {
-  constructor(private readonly agent: UniversityAgent) {}
+  constructor(
+    private readonly agent: UniversityAgent,
+    private readonly revocationIndexes = new RevocationIndexStore(),
+  ) {}
 
   private toTimestamp(record: { createdAt: Date; updatedAt?: Date }): string {
     return (record.updatedAt ?? record.createdAt).toISOString()
@@ -20,8 +26,15 @@ export class CredentialService {
 
   async createOfferInvitation(_params: {
     credentialDefinitionId: string
+    revocationRegistryDefinitionId?: string
     attributes: Array<{ name: string; value: unknown }>
-  }): Promise<{ invitationUrl: string; credentialExchangeId: string; outOfBandId: string }> {
+  }): Promise<{
+    invitationUrl: string
+    credentialExchangeId: string
+    credentialRevocationId?: string
+    outOfBandId: string
+    revocationRegistryDefinitionId?: string
+  }> {
     // AnonCreds attributes are strings on the wire, even when the portal sends numbers.
     const attributes = _params.attributes.map((attribute) => ({
       name: String(attribute.name),
@@ -36,11 +49,24 @@ export class CredentialService {
       })),
     )
 
+    const revocation = _params.revocationRegistryDefinitionId
+      ? await this.allocateRevocationIndex(
+          _params.credentialDefinitionId,
+          _params.revocationRegistryDefinitionId,
+        )
+      : undefined
+
     const { message, credentialRecord } = await this.agent.credentials.createOffer({
       protocolVersion: 'v2',
       credentialFormats: {
         anoncreds: {
           credentialDefinitionId: _params.credentialDefinitionId,
+          ...(revocation
+            ? {
+                revocationRegistryDefinitionId: revocation.revocationRegistryDefinitionId,
+                revocationRegistryIndex: revocation.revocationRegistryIndex,
+              }
+            : {}),
           attributes,
         },
       },
@@ -54,12 +80,49 @@ export class CredentialService {
     return {
       invitationUrl: outOfBandRecord.outOfBandInvitation.toUrl({ domain: config.agent.endpoint }),
       credentialExchangeId: credentialRecord.id,
+      credentialRevocationId: revocation?.revocationRegistryIndex.toString(),
       outOfBandId: outOfBandRecord.id,
+      revocationRegistryDefinitionId: revocation?.revocationRegistryDefinitionId,
+    }
+  }
+
+  private async allocateRevocationIndex(
+    credentialDefinitionId: string,
+    revocationRegistryDefinitionId: string,
+  ) {
+    const result = await this.agent.modules.anoncreds.getRevocationRegistryDefinition(
+      revocationRegistryDefinitionId,
+    )
+    const definition = result.revocationRegistryDefinition
+    if (!definition) {
+      throw new AppError(422, 'Revocation registry definition could not be resolved.', undefined, 'REVOCATION_REGISTRY_NOT_FOUND')
+    }
+    if (definition.credDefId !== credentialDefinitionId) {
+      throw new AppError(
+        409,
+        'Revocation registry does not belong to the requested credential definition.',
+        undefined,
+        'REVOCATION_REGISTRY_CREDENTIAL_DEFINITION_MISMATCH',
+      )
+    }
+
+    const maximumCredentialNumber = definition.value.maxCredNum
+    if (!Number.isSafeInteger(maximumCredentialNumber) || maximumCredentialNumber <= 1) {
+      throw new AppError(422, 'Revocation registry has an invalid maximum credential count.')
+    }
+
+    return {
+      revocationRegistryDefinitionId,
+      revocationRegistryIndex: await this.revocationIndexes.reserve(
+        revocationRegistryDefinitionId,
+        maximumCredentialNumber,
+      ),
     }
   }
 
   async createBatchOfferInvitations(_params: {
     credentialDefinitionId: string
+    revocationRegistryDefinitionId?: string
     students: Array<{
       externalId?: string
       email?: string
@@ -71,7 +134,9 @@ export class CredentialService {
       email?: string
       invitationUrl: string
       credentialExchangeId: string
+      credentialRevocationId?: string
       outOfBandId: string
+      revocationRegistryDefinitionId?: string
     }>
     failures: Array<{ externalId?: string; email?: string; message: string }>
   }> {
@@ -80,7 +145,9 @@ export class CredentialService {
       email?: string
       invitationUrl: string
       credentialExchangeId: string
+      credentialRevocationId?: string
       outOfBandId: string
+      revocationRegistryDefinitionId?: string
     }> = []
     const failures: Array<{ externalId?: string; email?: string; message: string }> = []
 
@@ -89,6 +156,7 @@ export class CredentialService {
         // Keep going when one student fails so a bad row does not block the whole batch.
         const offer = await this.createOfferInvitation({
           credentialDefinitionId: _params.credentialDefinitionId,
+          revocationRegistryDefinitionId: _params.revocationRegistryDefinitionId,
           attributes: student.attributes,
         })
         offers.push({

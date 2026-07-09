@@ -30,15 +30,6 @@ function parsePositiveInteger(name: string, fallback: number): number {
   return parsed
 }
 
-function parseBoolean(name: string, fallback: boolean): boolean {
-  const raw = process.env[name]
-  if (!raw) return fallback
-
-  if (raw === 'true') return true
-  if (raw === 'false') return false
-  throw new Error(`Environment variable ${name} must be either "true" or "false" (got "${raw}")`)
-}
-
 function parseCsv(name: string): string[] {
   const raw = process.env[name]
   if (!raw) return []
@@ -80,7 +71,6 @@ export const config = {
     publicBaseUrl: withoutTrailingSlash(requireEnv('VERIFICATION_PUBLIC_BASE_URL', 'http://localhost:3000')),
     sessionTtlMinutes: parsePositiveInteger('VERIFICATION_SESSION_TTL_MINUTES', 5),
     resultVisibilityMinutes: parsePositiveInteger('VERIFICATION_RESULT_VISIBILITY_MINUTES', 15),
-    requireNonRevoked: parseBoolean('VERIFIER_REQUIRE_NON_REVOKED', false),
     label: requireEnv('VERIFIER_LABEL', 'UNIFY Student Verifier'),
     rateLimitPerIp: parsePositiveInteger('VERIFICATION_RATE_LIMIT_PER_IP', 5),
     rateLimitPerServicePoint: parsePositiveInteger('VERIFICATION_RATE_LIMIT_PER_SERVICE_POINT', 30),
@@ -103,6 +93,18 @@ export const config = {
     walletActivationRoute: requireEnv('WALLET_ACTIVATION_ROUTE', 'unifywallet://activate'),
     tokenTtlHours: parsePositiveInteger('ACTIVATION_TOKEN_TTL_HOURS', 24),
     issuerLabel: process.env.ACTIVATION_ISSUER_LABEL || 'UNIFY Issuer Service',
+  },
+  credentialLifecycle: {
+    storeFile: requireEnv(
+      'CREDENTIAL_LIFECYCLE_STORE_FILE',
+      join(homedir(), '.afj', 'credential-lifecycle.json'),
+    ),
+  },
+  revocationIndexes: {
+    storeFile: requireEnv(
+      'REVOCATION_INDEX_STORE_FILE',
+      join(homedir(), '.afj', 'revocation-indexes.json'),
+    ),
   },
   demoIssuance: {
     // Temporary fallback while the Admin Portal owns setup persistence.

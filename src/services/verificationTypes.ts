@@ -1,15 +1,8 @@
-export const VERIFICATION_ATTRIBUTES = [
-  'studentNumber',
-  'faculty',
-  'year',
-] as const
-
-export type VerificationAttributeName = (typeof VERIFICATION_ATTRIBUTES)[number]
-
 export type VerificationDecision = 'Pending' | 'Approved' | 'Declined' | 'Expired' | 'Failed'
 
 export type VerificationFailureCode =
   | 'CREDO_PROTOCOL_ERROR'
+  | 'CREDENTIAL_NOT_CURRENT'
   | 'PROOF_EXCHANGE_ABANDONED'
   | 'PROOF_NOT_VERIFIED'
   | 'PROOF_REQUEST_EXPIRED'
@@ -25,6 +18,7 @@ export type ServicePointRecord = {
   vendorName: string
   externalId: string
   name: string
+  credentialDefinitionId?: string
   active: boolean
   createdAt: string
   updatedAt: string
@@ -41,6 +35,9 @@ export type VerificationSessionRecord = {
   expiresAt: string
   state: string
   decision: VerificationDecision
+  credentialDefinitionId?: string
+  requestedAttributes?: string[]
+  nonRevocationRequested?: boolean
   isVerified?: boolean
   failureCode?: VerificationFailureCode
   completedAt?: string
@@ -48,4 +45,16 @@ export type VerificationSessionRecord = {
   proofRecordDeletedAt?: string
 }
 
-export type RevealedVerificationAttributes = Record<VerificationAttributeName, string>
+export type RevealedVerificationAttributes = Record<string, string>
+
+export type TrustedCredentialDefinitionRecord = {
+  credentialDefinitionId: string
+  schemaId: string
+  schemaName: string
+  schemaVersion: string
+  attributes: string[]
+  active: boolean
+  isDefault: boolean
+  createdAt: string
+  updatedAt: string
+}

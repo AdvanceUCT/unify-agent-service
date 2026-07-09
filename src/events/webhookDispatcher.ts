@@ -15,10 +15,25 @@ export type ConnectionStateChangedWebhookPayload = {
 export type CredentialStateChangedWebhookPayload = {
   connectionId?: string
   credentialExchangeId: string
+  credentialRevocationId?: string
   previousState: string | null
+  revocationRegistryDefinitionId?: string
   state: string
   timestamp: string
   type: 'credential.stateChanged'
+}
+
+export type CredentialLifecycleChangedWebhookPayload = {
+  credentialExchangeId: string
+  credentialRevocationId: string
+  eventId: string
+  previousStatus: 'ACTIVE' | 'SUSPENDED' | 'REVOKED'
+  reason?: string
+  revocationRegistryDefinitionId: string
+  status: 'ACTIVE' | 'SUSPENDED' | 'REVOKED'
+  statusListTimestamp?: number
+  timestamp: string
+  type: 'credential.lifecycleChanged'
 }
 
 export type ProofStateChangedWebhookPayload = {
@@ -38,6 +53,7 @@ export type ProofStateChangedWebhookPayload = {
 export type WebhookPayload =
   | ConnectionStateChangedWebhookPayload
   | CredentialStateChangedWebhookPayload
+  | CredentialLifecycleChangedWebhookPayload
   | ProofStateChangedWebhookPayload
 
 type FetchLike = (

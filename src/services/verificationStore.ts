@@ -4,16 +4,22 @@ import { dirname } from 'node:path'
 import { config } from '../config'
 import { AppError } from '../errors'
 
-import type { ServicePointRecord, VerificationSessionRecord } from './verificationTypes'
+import type {
+  ServicePointRecord,
+  TrustedCredentialDefinitionRecord,
+  VerificationSessionRecord,
+} from './verificationTypes'
 
 type VerificationStoreFile = {
   servicePoints: ServicePointRecord[]
   sessions: VerificationSessionRecord[]
+  trustedCredentialDefinitions: TrustedCredentialDefinitionRecord[]
 }
 
 const EMPTY_STORE: VerificationStoreFile = {
   servicePoints: [],
   sessions: [],
+  trustedCredentialDefinitions: [],
 }
 
 export class VerificationStore {
@@ -43,6 +49,49 @@ export class VerificationStore {
       state.servicePoints.push(record)
       await this.writeState(state)
       return record
+    })
+  }
+
+  async listTrustedCredentialDefinitions(): Promise<TrustedCredentialDefinitionRecord[]> {
+    return this.withLock(async () => (await this.readState()).trustedCredentialDefinitions)
+  }
+
+  async findTrustedCredentialDefinition(
+    credentialDefinitionId: string,
+  ): Promise<TrustedCredentialDefinitionRecord | undefined> {
+    return this.withLock(async () =>
+      (await this.readState()).trustedCredentialDefinitions.find(
+        (record) => record.credentialDefinitionId === credentialDefinitionId,
+      ),
+    )
+  }
+
+  async upsertTrustedCredentialDefinition(
+    record: TrustedCredentialDefinitionRecord,
+    makeDefault: boolean,
+  ): Promise<TrustedCredentialDefinitionRecord> {
+    return this.withLock(async () => {
+      const state = await this.readState()
+      if (makeDefault) {
+        state.trustedCredentialDefinitions = state.trustedCredentialDefinitions.map((item) => ({
+          ...item,
+          isDefault: false,
+        }))
+      }
+
+      const index = state.trustedCredentialDefinitions.findIndex(
+        (item) => item.credentialDefinitionId === record.credentialDefinitionId,
+      )
+      const next = {
+        ...record,
+        isDefault:
+          makeDefault || record.isDefault || (index >= 0 && state.trustedCredentialDefinitions[index].isDefault),
+      }
+      if (index >= 0) state.trustedCredentialDefinitions[index] = next
+      else state.trustedCredentialDefinitions.push(next)
+
+      await this.writeState(state)
+      return next
     })
   }
 
@@ -156,7 +205,7 @@ export class VerificationStore {
       raw = await readFile(this.filePath, 'utf8')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return { servicePoints: [], sessions: [] }
+        return { servicePoints: [], sessions: [], trustedCredentialDefinitions: [] }
       }
       throw error
     }
@@ -169,6 +218,9 @@ export class VerificationStore {
       return {
         servicePoints: parsed.servicePoints,
         sessions: parsed.sessions,
+        trustedCredentialDefinitions: Array.isArray(parsed.trustedCredentialDefinitions)
+          ? parsed.trustedCredentialDefinitions
+          : [],
       }
     } catch (error) {
       throw new AppError(

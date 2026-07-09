@@ -21,6 +21,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       const body = requireObject(req.body)
       const result = await credentials.createOfferInvitation({
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
+        revocationRegistryDefinitionId: optionalString(body, 'revocationRegistryDefinitionId'),
         attributes: requireAttributes(body),
       })
       res.status(201).json(result)
@@ -40,6 +41,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
 
       const result = await credentials.createBatchOfferInvitations({
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
+        revocationRegistryDefinitionId: optionalString(body, 'revocationRegistryDefinitionId'),
         students: students.map((student, index) => {
           const value = requireObject(student, `students[${index}]`)
           return {
@@ -67,6 +69,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
 
       const result = await activationLinks.createBatchActivationLinks({
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
+        revocationRegistryDefinitionId: optionalString(body, 'revocationRegistryDefinitionId'),
         students: students.map((student, index) => {
           const value = requireObject(student, `students[${index}]`)
           return {
@@ -97,6 +100,37 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       // The Admin Portal polls this after issuance returns a credentialExchangeId.
       const result = await credentials.getStatus(req.params.id)
       res.json(result)
+    })
+  )
+
+  router.post(
+    '/:id/suspend',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body ?? {})
+      const result = await revocations.suspend({
+        credentialExchangeId: req.params.id,
+        reason: optionalString(body, 'reason'),
+      })
+      res.json(result)
+    })
+  )
+
+  router.post(
+    '/:id/reactivate',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body ?? {})
+      const result = await revocations.reactivate({
+        credentialExchangeId: req.params.id,
+        reason: optionalString(body, 'reason'),
+      })
+      res.json(result)
+    })
+  )
+
+  router.get(
+    '/:id/lifecycle',
+    asyncHandler(async (req, res) => {
+      res.json(await revocations.getLifecycle(req.params.id))
     })
   )
 

@@ -24,7 +24,9 @@ export type BatchActivationLinkResult = {
     activationId: string
     activationUrl: string
     credentialExchangeId: string
+    credentialRevocationId?: string
     outOfBandId: string
+    revocationRegistryDefinitionId?: string
     email?: string
     expiresAt: string
     externalId?: string
@@ -68,6 +70,7 @@ export class ActivationLinkService {
 
   async createBatchActivationLinks(params: {
     credentialDefinitionId: string
+    revocationRegistryDefinitionId?: string
     students: StudentActivationInput[]
   }): Promise<BatchActivationLinkResult> {
     const offers: BatchActivationLinkResult['offers'] = []
@@ -77,6 +80,7 @@ export class ActivationLinkService {
       try {
         const offer = await this.createActivationLink({
           credentialDefinitionId: params.credentialDefinitionId,
+          revocationRegistryDefinitionId: params.revocationRegistryDefinitionId,
           student,
         })
         offers.push(offer)
@@ -94,6 +98,7 @@ export class ActivationLinkService {
 
   private async createActivationLink(params: {
     credentialDefinitionId: string
+    revocationRegistryDefinitionId?: string
     student: StudentActivationInput
   }): Promise<BatchActivationLinkResult['offers'][number]> {
     const token = generateActivationToken()
@@ -102,6 +107,7 @@ export class ActivationLinkService {
     const offer = await this.credentials.createOfferInvitation({
       attributes: params.student.attributes,
       credentialDefinitionId: params.credentialDefinitionId,
+      revocationRegistryDefinitionId: params.revocationRegistryDefinitionId,
     })
     const invitationId = invitationIdFromUrl(offer.invitationUrl, `unify-oob-${suffixFor(activationId)}`)
     const expiresAt = expiresAtFrom(createdAt)
@@ -110,10 +116,12 @@ export class ActivationLinkService {
       activationId,
       createdAt: createdAt.toISOString(),
       credentialExchangeId: offer.credentialExchangeId,
+      credentialRevocationId: offer.credentialRevocationId,
       expiresAt,
       invitationId,
       invitationUrl: offer.invitationUrl,
       issuerLabel: config.activations.issuerLabel,
+      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
       tokenHash: hashActivationToken(token),
     }
 
@@ -123,7 +131,9 @@ export class ActivationLinkService {
       activationId,
       activationUrl: activationUrlForToken(token),
       credentialExchangeId: offer.credentialExchangeId,
+      credentialRevocationId: offer.credentialRevocationId,
       outOfBandId: offer.outOfBandId,
+      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
       email: params.student.email,
       expiresAt,
       externalId: params.student.externalId,
