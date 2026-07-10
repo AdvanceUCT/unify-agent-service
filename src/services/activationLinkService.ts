@@ -10,7 +10,7 @@ import {
   hashActivationToken,
   type StoredActivationRecord,
 } from './activationStore'
-import { CredentialService } from './credentialService'
+import { CredentialService, withRevocationRegistryDefinitionId } from './credentialService'
 
 type StudentActivationInput = {
   attributes: Array<{ name: string; value: string }>
@@ -93,10 +93,9 @@ export class ActivationLinkService {
           credentialDefinitionId: params.credentialDefinitionId,
           student,
         }
-        if (params.revocationRegistryDefinitionId) {
-          input.revocationRegistryDefinitionId = params.revocationRegistryDefinitionId
-        }
-        const offer = await this.createActivationLink(input)
+        const offer = await this.createActivationLink(
+          withRevocationRegistryDefinitionId(input, params.revocationRegistryDefinitionId),
+        )
         offers.push(offer)
       } catch (error) {
         failures.push({
@@ -122,10 +121,9 @@ export class ActivationLinkService {
       attributes: params.student.attributes,
       credentialDefinitionId: params.credentialDefinitionId,
     }
-    if (params.revocationRegistryDefinitionId) {
-      input.revocationRegistryDefinitionId = params.revocationRegistryDefinitionId
-    }
-    const offer = await this.credentials.createOfferInvitation(input)
+    const offer = await this.credentials.createOfferInvitation(
+      withRevocationRegistryDefinitionId(input, params.revocationRegistryDefinitionId),
+    )
     const credentialRevocationId = optionalStringProperty(offer, 'credentialRevocationId')
     const revocationRegistryDefinitionId = optionalStringProperty(offer, 'revocationRegistryDefinitionId')
     const invitationId = invitationIdFromUrl(offer.invitationUrl, `unify-oob-${suffixFor(activationId)}`)

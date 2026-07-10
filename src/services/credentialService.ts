@@ -18,6 +18,17 @@ export type CredentialOfferInvitationResult = {
   revocationRegistryDefinitionId?: string
 }
 
+export function withRevocationRegistryDefinitionId<T extends object>(
+  input: T,
+  revocationRegistryDefinitionId?: string,
+): T & { revocationRegistryDefinitionId?: string } {
+  if (revocationRegistryDefinitionId) {
+    ;(input as Record<string, unknown>).revocationRegistryDefinitionId = revocationRegistryDefinitionId
+  }
+
+  return input as T & { revocationRegistryDefinitionId?: string }
+}
+
 export class CredentialService {
   constructor(
     private readonly agent: UniversityAgent,
@@ -166,10 +177,9 @@ export class CredentialService {
           credentialDefinitionId: _params.credentialDefinitionId,
           attributes: student.attributes,
         }
-        if (_params.revocationRegistryDefinitionId) {
-          input.revocationRegistryDefinitionId = _params.revocationRegistryDefinitionId
-        }
-        const offer = await this.createOfferInvitation(input)
+        const offer = await this.createOfferInvitation(
+          withRevocationRegistryDefinitionId(input, _params.revocationRegistryDefinitionId),
+        )
         offers.push({
           externalId: student.externalId,
           email: student.email,

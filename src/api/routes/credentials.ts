@@ -1,7 +1,7 @@
 import { Router } from 'express'
 
 import { ActivationLinkService } from '../../services/activationLinkService'
-import { CredentialService, type CredentialOfferInvitationInput } from '../../services/credentialService'
+import { CredentialService, withRevocationRegistryDefinitionId } from '../../services/credentialService'
 import { RevocationService } from '../../services/revocationService'
 import type { UniversityAgent } from '../../agent'
 import { AppError } from '../../errors'
@@ -13,6 +13,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
   const activationLinks = new ActivationLinkService(agent)
   const credentials = new CredentialService(agent)
   const revocations = new RevocationService(agent)
+  type CredentialOfferInput = Parameters<typeof credentials.createOfferInvitation>[0]
 
   router.post(
     '/offers',
@@ -20,14 +21,13 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       // Single-offer route stays useful for manual testing and one-off issuance.
       const body = requireObject(req.body)
       const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
-      const input: CredentialOfferInvitationInput = {
+      const input: CredentialOfferInput = {
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
         attributes: requireAttributes(body),
       }
-      if (revocationRegistryDefinitionId) {
-        input.revocationRegistryDefinitionId = revocationRegistryDefinitionId
-      }
-      const result = await credentials.createOfferInvitation(input)
+      const result = await credentials.createOfferInvitation(
+        withRevocationRegistryDefinitionId(input, revocationRegistryDefinitionId),
+      )
       res.status(201).json(result)
     })
   )
@@ -63,11 +63,9 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
           }
         }),
       }
-      if (revocationRegistryDefinitionId) {
-        input.revocationRegistryDefinitionId = revocationRegistryDefinitionId
-      }
-
-      const result = await credentials.createBatchOfferInvitations(input)
+      const result = await credentials.createBatchOfferInvitations(
+        withRevocationRegistryDefinitionId(input, revocationRegistryDefinitionId),
+      )
 
       res.status(201).json(result)
     })
@@ -104,11 +102,9 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
           }
         }),
       }
-      if (revocationRegistryDefinitionId) {
-        input.revocationRegistryDefinitionId = revocationRegistryDefinitionId
-      }
-
-      const result = await activationLinks.createBatchActivationLinks(input)
+      const result = await activationLinks.createBatchActivationLinks(
+        withRevocationRegistryDefinitionId(input, revocationRegistryDefinitionId),
+      )
 
       res.status(201).json(result)
     })
