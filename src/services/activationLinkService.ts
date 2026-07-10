@@ -10,13 +10,15 @@ import {
   hashActivationToken,
   type StoredActivationRecord,
 } from './activationStore'
-import { CredentialService, type CredentialOfferInvitationInput } from './credentialService'
+import { CredentialService } from './credentialService'
 
 type StudentActivationInput = {
   attributes: Array<{ name: string; value: string }>
   email?: string
   externalId?: string
 }
+
+type CredentialOfferInput = Parameters<CredentialService['createOfferInvitation']>[0]
 
 export type BatchActivationLinkResult = {
   failures: Array<{ email?: string; externalId?: string; message: string }>
@@ -116,7 +118,7 @@ export class ActivationLinkService {
     const token = generateActivationToken()
     const activationId = generateActivationId()
     const createdAt = new Date()
-    const input: CredentialOfferInvitationInput = {
+    const input: CredentialOfferInput = {
       attributes: params.student.attributes,
       credentialDefinitionId: params.credentialDefinitionId,
     }
