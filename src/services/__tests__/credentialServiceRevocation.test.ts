@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { AppError } from '../../errors'
-import { CredentialService } from '../credentialService'
+import { CredentialService, type CredentialOfferInvitationInput } from '../credentialService'
 import { RevocationIndexStore } from '../revocationIndexStore'
 
 function makeAgent(credentialDefinitionId = 'cred-def-1') {
@@ -84,13 +84,13 @@ describe('CredentialService revocation allocation', () => {
       new RevocationIndexStore(join(directory, 'indexes.json')),
     )
 
-    const error = await service
-      .createOfferInvitation({
-        attributes: [{ name: 'studentNumber', value: 'STU001' }],
-        credentialDefinitionId: 'cred-def-1',
-        revocationRegistryDefinitionId: 'rev-reg-1',
-      })
-      .catch((caught) => caught)
+    const input: CredentialOfferInvitationInput = {
+      attributes: [{ name: 'studentNumber', value: 'STU001' }],
+      credentialDefinitionId: 'cred-def-1',
+    }
+    input.revocationRegistryDefinitionId = 'rev-reg-1'
+
+    const error = await service.createOfferInvitation(input).catch((caught) => caught)
 
     expect(error).toBeInstanceOf(AppError)
     expect((error as AppError).code).toBe('REVOCATION_REGISTRY_CREDENTIAL_DEFINITION_MISMATCH')

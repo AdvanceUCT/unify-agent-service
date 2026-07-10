@@ -1,7 +1,7 @@
 import { Router } from 'express'
 
 import { ActivationLinkService } from '../../services/activationLinkService'
-import { CredentialService } from '../../services/credentialService'
+import { CredentialService, type CredentialOfferInvitationInput } from '../../services/credentialService'
 import { RevocationService } from '../../services/revocationService'
 import type { UniversityAgent } from '../../agent'
 import { AppError } from '../../errors'
@@ -20,11 +20,14 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       // Single-offer route stays useful for manual testing and one-off issuance.
       const body = requireObject(req.body)
       const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
-      const result = await credentials.createOfferInvitation({
+      const input: CredentialOfferInvitationInput = {
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
         attributes: requireAttributes(body),
-        ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
-      })
+      }
+      if (revocationRegistryDefinitionId) {
+        input.revocationRegistryDefinitionId = revocationRegistryDefinitionId
+      }
+      const result = await credentials.createOfferInvitation(input)
       res.status(201).json(result)
     })
   )
@@ -41,9 +44,16 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       }
       const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
 
-      const result = await credentials.createBatchOfferInvitations({
+      const input: {
+        credentialDefinitionId: string
+        revocationRegistryDefinitionId?: string
+        students: Array<{
+          externalId?: string
+          email?: string
+          attributes: Array<{ name: string; value: string }>
+        }>
+      } = {
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
-        ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
         students: students.map((student, index) => {
           const value = requireObject(student, `students[${index}]`)
           return {
@@ -52,7 +62,12 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
             attributes: requireAttributes(value),
           }
         }),
-      })
+      }
+      if (revocationRegistryDefinitionId) {
+        input.revocationRegistryDefinitionId = revocationRegistryDefinitionId
+      }
+
+      const result = await credentials.createBatchOfferInvitations(input)
 
       res.status(201).json(result)
     })
@@ -70,9 +85,16 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       }
       const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
 
-      const result = await activationLinks.createBatchActivationLinks({
+      const input: {
+        credentialDefinitionId: string
+        revocationRegistryDefinitionId?: string
+        students: Array<{
+          externalId?: string
+          email?: string
+          attributes: Array<{ name: string; value: string }>
+        }>
+      } = {
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
-        ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
         students: students.map((student, index) => {
           const value = requireObject(student, `students[${index}]`)
           return {
@@ -81,7 +103,12 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
             attributes: requireAttributes(value),
           }
         }),
-      })
+      }
+      if (revocationRegistryDefinitionId) {
+        input.revocationRegistryDefinitionId = revocationRegistryDefinitionId
+      }
+
+      const result = await activationLinks.createBatchActivationLinks(input)
 
       res.status(201).json(result)
     })

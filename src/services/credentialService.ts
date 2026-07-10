@@ -81,17 +81,17 @@ export class CredentialService {
       messages: [message],
     })
 
-    return {
+    const result: CredentialOfferInvitationResult = {
       invitationUrl: outOfBandRecord.outOfBandInvitation.toUrl({ domain: config.agent.endpoint }),
       credentialExchangeId: credentialRecord.id,
       outOfBandId: outOfBandRecord.id,
-      ...(revocation
-        ? {
-            credentialRevocationId: revocation.revocationRegistryIndex.toString(),
-            revocationRegistryDefinitionId: revocation.revocationRegistryDefinitionId,
-          }
-        : {}),
     }
+    if (revocation) {
+      result.credentialRevocationId = revocation.revocationRegistryIndex.toString()
+      result.revocationRegistryDefinitionId = revocation.revocationRegistryDefinitionId
+    }
+
+    return result
   }
 
   private async allocateRevocationIndex(
@@ -165,9 +165,9 @@ export class CredentialService {
         const input: CredentialOfferInvitationInput = {
           credentialDefinitionId: _params.credentialDefinitionId,
           attributes: student.attributes,
-          ...(_params.revocationRegistryDefinitionId
-            ? { revocationRegistryDefinitionId: _params.revocationRegistryDefinitionId }
-            : {}),
+        }
+        if (_params.revocationRegistryDefinitionId) {
+          input.revocationRegistryDefinitionId = _params.revocationRegistryDefinitionId
         }
         const offer = await this.createOfferInvitation(input)
         offers.push({

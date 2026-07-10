@@ -83,12 +83,16 @@ export class ActivationLinkService {
 
     for (const student of params.students) {
       try {
-        const input = {
+        const input: {
+          credentialDefinitionId: string
+          revocationRegistryDefinitionId?: string
+          student: StudentActivationInput
+        } = {
           credentialDefinitionId: params.credentialDefinitionId,
           student,
-          ...(params.revocationRegistryDefinitionId
-            ? { revocationRegistryDefinitionId: params.revocationRegistryDefinitionId }
-            : {}),
+        }
+        if (params.revocationRegistryDefinitionId) {
+          input.revocationRegistryDefinitionId = params.revocationRegistryDefinitionId
         }
         const offer = await this.createActivationLink(input)
         offers.push(offer)
@@ -115,9 +119,9 @@ export class ActivationLinkService {
     const input: CredentialOfferInvitationInput = {
       attributes: params.student.attributes,
       credentialDefinitionId: params.credentialDefinitionId,
-      ...(params.revocationRegistryDefinitionId
-        ? { revocationRegistryDefinitionId: params.revocationRegistryDefinitionId }
-        : {}),
+    }
+    if (params.revocationRegistryDefinitionId) {
+      input.revocationRegistryDefinitionId = params.revocationRegistryDefinitionId
     }
     const offer = await this.credentials.createOfferInvitation(input)
     const credentialRevocationId = optionalStringProperty(offer, 'credentialRevocationId')
@@ -134,22 +138,32 @@ export class ActivationLinkService {
       invitationUrl: offer.invitationUrl,
       issuerLabel: config.activations.issuerLabel,
       tokenHash: hashActivationToken(token),
-      ...(credentialRevocationId ? { credentialRevocationId } : {}),
-      ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
+    }
+    if (credentialRevocationId) {
+      record.credentialRevocationId = credentialRevocationId
+    }
+    if (revocationRegistryDefinitionId) {
+      record.revocationRegistryDefinitionId = revocationRegistryDefinitionId
     }
 
     await this.store.save(record)
 
-    return {
+    const result: BatchActivationLinkResult['offers'][number] = {
       activationId,
       activationUrl: activationUrlForToken(token),
       credentialExchangeId: offer.credentialExchangeId,
       outOfBandId: offer.outOfBandId,
       expiresAt,
-      ...(credentialRevocationId ? { credentialRevocationId } : {}),
-      ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
       ...(params.student.email ? { email: params.student.email } : {}),
       ...(params.student.externalId ? { externalId: params.student.externalId } : {}),
     }
+    if (credentialRevocationId) {
+      result.credentialRevocationId = credentialRevocationId
+    }
+    if (revocationRegistryDefinitionId) {
+      result.revocationRegistryDefinitionId = revocationRegistryDefinitionId
+    }
+
+    return result
   }
 }
