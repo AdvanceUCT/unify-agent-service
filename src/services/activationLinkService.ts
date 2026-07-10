@@ -86,8 +86,8 @@ export class ActivationLinkService {
         offers.push(offer)
       } catch (error) {
         failures.push({
-          email: student.email,
-          externalId: student.externalId,
+          ...(student.email ? { email: student.email } : {}),
+          ...(student.externalId ? { externalId: student.externalId } : {}),
           message: error instanceof Error ? error.message : String(error),
         })
       }
@@ -116,13 +116,15 @@ export class ActivationLinkService {
       activationId,
       createdAt: createdAt.toISOString(),
       credentialExchangeId: offer.credentialExchangeId,
-      credentialRevocationId: offer.credentialRevocationId,
       expiresAt,
       invitationId,
       invitationUrl: offer.invitationUrl,
       issuerLabel: config.activations.issuerLabel,
-      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
       tokenHash: hashActivationToken(token),
+      ...(offer.credentialRevocationId ? { credentialRevocationId: offer.credentialRevocationId } : {}),
+      ...(offer.revocationRegistryDefinitionId
+        ? { revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId }
+        : {}),
     }
 
     await this.store.save(record)
@@ -131,12 +133,14 @@ export class ActivationLinkService {
       activationId,
       activationUrl: activationUrlForToken(token),
       credentialExchangeId: offer.credentialExchangeId,
-      credentialRevocationId: offer.credentialRevocationId,
       outOfBandId: offer.outOfBandId,
-      revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId,
-      email: params.student.email,
       expiresAt,
-      externalId: params.student.externalId,
+      ...(offer.credentialRevocationId ? { credentialRevocationId: offer.credentialRevocationId } : {}),
+      ...(offer.revocationRegistryDefinitionId
+        ? { revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId }
+        : {}),
+      ...(params.student.email ? { email: params.student.email } : {}),
+      ...(params.student.externalId ? { externalId: params.student.externalId } : {}),
     }
   }
 }
