@@ -18,7 +18,7 @@ export type CredentialOfferInvitationResult = {
   revocationRegistryDefinitionId?: string
 }
 
-export function withRevocationRegistryDefinitionId<T extends object>(
+function withRevocationRegistryDefinitionId<T extends object>(
   input: T,
   revocationRegistryDefinitionId?: string,
 ): T & { revocationRegistryDefinitionId?: string } {

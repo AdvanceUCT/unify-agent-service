@@ -1,12 +1,23 @@
 import { Router } from 'express'
 
 import { ActivationLinkService } from '../../services/activationLinkService'
-import { CredentialService, withRevocationRegistryDefinitionId } from '../../services/credentialService'
+import { CredentialService } from '../../services/credentialService'
 import { RevocationService } from '../../services/revocationService'
 import type { UniversityAgent } from '../../agent'
 import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireAttributes, requireObject, requireString } from '../validation'
+
+function withRevocationRegistryDefinitionId<T extends object>(
+  input: T,
+  revocationRegistryDefinitionId?: string,
+): T & { revocationRegistryDefinitionId?: string } {
+  if (revocationRegistryDefinitionId) {
+    ;(input as Record<string, unknown>).revocationRegistryDefinitionId = revocationRegistryDefinitionId
+  }
+
+  return input as T & { revocationRegistryDefinitionId?: string }
+}
 
 export function buildCredentialsRouter(agent: UniversityAgent): Router {
   const router = Router()

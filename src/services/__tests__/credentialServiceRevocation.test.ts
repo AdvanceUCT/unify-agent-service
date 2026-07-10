@@ -3,8 +3,19 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { AppError } from '../../errors'
-import { CredentialService, withRevocationRegistryDefinitionId } from '../credentialService'
+import { CredentialService } from '../credentialService'
 import { RevocationIndexStore } from '../revocationIndexStore'
+
+function withRevocationRegistryDefinitionId<T extends object>(
+  input: T,
+  revocationRegistryDefinitionId?: string,
+): T & { revocationRegistryDefinitionId?: string } {
+  if (revocationRegistryDefinitionId) {
+    ;(input as Record<string, unknown>).revocationRegistryDefinitionId = revocationRegistryDefinitionId
+  }
+
+  return input as T & { revocationRegistryDefinitionId?: string }
+}
 
 function makeAgent(credentialDefinitionId = 'cred-def-1') {
   let exchangeNumber = 0

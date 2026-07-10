@@ -10,7 +10,7 @@ import {
   hashActivationToken,
   type StoredActivationRecord,
 } from './activationStore'
-import { CredentialService, withRevocationRegistryDefinitionId } from './credentialService'
+import { CredentialService } from './credentialService'
 
 type StudentActivationInput = {
   attributes: Array<{ name: string; value: string }>
@@ -63,6 +63,17 @@ function expiresAtFrom(createdAt: Date): string {
 function optionalStringProperty(value: object, key: string): string | undefined {
   const property = (value as Record<string, unknown>)[key]
   return typeof property === 'string' && property ? property : undefined
+}
+
+function withRevocationRegistryDefinitionId<T extends object>(
+  input: T,
+  revocationRegistryDefinitionId?: string,
+): T & { revocationRegistryDefinitionId?: string } {
+  if (revocationRegistryDefinitionId) {
+    ;(input as Record<string, unknown>).revocationRegistryDefinitionId = revocationRegistryDefinitionId
+  }
+
+  return input as T & { revocationRegistryDefinitionId?: string }
 }
 
 export class ActivationLinkService {
