@@ -58,6 +58,11 @@ function expiresAtFrom(createdAt: Date): string {
   return expiresAt.toISOString()
 }
 
+function optionalStringProperty(value: object, key: string): string | undefined {
+  const property = (value as Record<string, unknown>)[key]
+  return typeof property === 'string' && property ? property : undefined
+}
+
 export class ActivationLinkService {
   private readonly credentials: CredentialService
 
@@ -109,6 +114,8 @@ export class ActivationLinkService {
       credentialDefinitionId: params.credentialDefinitionId,
       revocationRegistryDefinitionId: params.revocationRegistryDefinitionId,
     })
+    const credentialRevocationId = optionalStringProperty(offer, 'credentialRevocationId')
+    const revocationRegistryDefinitionId = optionalStringProperty(offer, 'revocationRegistryDefinitionId')
     const invitationId = invitationIdFromUrl(offer.invitationUrl, `unify-oob-${suffixFor(activationId)}`)
     const expiresAt = expiresAtFrom(createdAt)
     // Only the token hash is stored so a leaked activation store cannot open offers.
@@ -121,10 +128,8 @@ export class ActivationLinkService {
       invitationUrl: offer.invitationUrl,
       issuerLabel: config.activations.issuerLabel,
       tokenHash: hashActivationToken(token),
-      ...(offer.credentialRevocationId ? { credentialRevocationId: offer.credentialRevocationId } : {}),
-      ...(offer.revocationRegistryDefinitionId
-        ? { revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId }
-        : {}),
+      ...(credentialRevocationId ? { credentialRevocationId } : {}),
+      ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
     }
 
     await this.store.save(record)
@@ -135,10 +140,8 @@ export class ActivationLinkService {
       credentialExchangeId: offer.credentialExchangeId,
       outOfBandId: offer.outOfBandId,
       expiresAt,
-      ...(offer.credentialRevocationId ? { credentialRevocationId: offer.credentialRevocationId } : {}),
-      ...(offer.revocationRegistryDefinitionId
-        ? { revocationRegistryDefinitionId: offer.revocationRegistryDefinitionId }
-        : {}),
+      ...(credentialRevocationId ? { credentialRevocationId } : {}),
+      ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
       ...(params.student.email ? { email: params.student.email } : {}),
       ...(params.student.externalId ? { externalId: params.student.externalId } : {}),
     }

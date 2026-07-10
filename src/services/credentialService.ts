@@ -80,9 +80,13 @@ export class CredentialService {
     return {
       invitationUrl: outOfBandRecord.outOfBandInvitation.toUrl({ domain: config.agent.endpoint }),
       credentialExchangeId: credentialRecord.id,
-      credentialRevocationId: revocation?.revocationRegistryIndex.toString(),
       outOfBandId: outOfBandRecord.id,
-      revocationRegistryDefinitionId: revocation?.revocationRegistryDefinitionId,
+      ...(revocation
+        ? {
+            credentialRevocationId: revocation.revocationRegistryIndex.toString(),
+            revocationRegistryDefinitionId: revocation.revocationRegistryDefinitionId,
+          }
+        : {}),
     }
   }
 
