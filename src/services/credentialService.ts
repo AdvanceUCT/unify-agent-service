@@ -4,6 +4,20 @@ import { AppError } from '../errors'
 
 import { RevocationIndexStore } from './revocationIndexStore'
 
+export type CredentialOfferInvitationInput = {
+  credentialDefinitionId: string
+  revocationRegistryDefinitionId?: string
+  attributes: Array<{ name: string; value: unknown }>
+}
+
+export type CredentialOfferInvitationResult = {
+  invitationUrl: string
+  credentialExchangeId: string
+  credentialRevocationId?: string
+  outOfBandId: string
+  revocationRegistryDefinitionId?: string
+}
+
 export class CredentialService {
   constructor(
     private readonly agent: UniversityAgent,
@@ -24,17 +38,7 @@ export class CredentialService {
     }
   }
 
-  async createOfferInvitation(_params: {
-    credentialDefinitionId: string
-    revocationRegistryDefinitionId?: string
-    attributes: Array<{ name: string; value: unknown }>
-  }): Promise<{
-    invitationUrl: string
-    credentialExchangeId: string
-    credentialRevocationId?: string
-    outOfBandId: string
-    revocationRegistryDefinitionId?: string
-  }> {
+  async createOfferInvitation(_params: CredentialOfferInvitationInput): Promise<CredentialOfferInvitationResult> {
     // AnonCreds attributes are strings on the wire, even when the portal sends numbers.
     const attributes = _params.attributes.map((attribute) => ({
       name: String(attribute.name),
@@ -158,11 +162,14 @@ export class CredentialService {
     for (const student of _params.students) {
       try {
         // Keep going when one student fails so a bad row does not block the whole batch.
-        const offer = await this.createOfferInvitation({
+        const input: CredentialOfferInvitationInput = {
           credentialDefinitionId: _params.credentialDefinitionId,
-          revocationRegistryDefinitionId: _params.revocationRegistryDefinitionId,
           attributes: student.attributes,
-        })
+          ...(_params.revocationRegistryDefinitionId
+            ? { revocationRegistryDefinitionId: _params.revocationRegistryDefinitionId }
+            : {}),
+        }
+        const offer = await this.createOfferInvitation(input)
         offers.push({
           externalId: student.externalId,
           email: student.email,

@@ -10,7 +10,7 @@ import {
   hashActivationToken,
   type StoredActivationRecord,
 } from './activationStore'
-import { CredentialService } from './credentialService'
+import { CredentialService, type CredentialOfferInvitationInput } from './credentialService'
 
 type StudentActivationInput = {
   attributes: Array<{ name: string; value: string }>
@@ -83,11 +83,14 @@ export class ActivationLinkService {
 
     for (const student of params.students) {
       try {
-        const offer = await this.createActivationLink({
+        const input = {
           credentialDefinitionId: params.credentialDefinitionId,
-          revocationRegistryDefinitionId: params.revocationRegistryDefinitionId,
           student,
-        })
+          ...(params.revocationRegistryDefinitionId
+            ? { revocationRegistryDefinitionId: params.revocationRegistryDefinitionId }
+            : {}),
+        }
+        const offer = await this.createActivationLink(input)
         offers.push(offer)
       } catch (error) {
         failures.push({
@@ -109,11 +112,14 @@ export class ActivationLinkService {
     const token = generateActivationToken()
     const activationId = generateActivationId()
     const createdAt = new Date()
-    const offer = await this.credentials.createOfferInvitation({
+    const input: CredentialOfferInvitationInput = {
       attributes: params.student.attributes,
       credentialDefinitionId: params.credentialDefinitionId,
-      revocationRegistryDefinitionId: params.revocationRegistryDefinitionId,
-    })
+      ...(params.revocationRegistryDefinitionId
+        ? { revocationRegistryDefinitionId: params.revocationRegistryDefinitionId }
+        : {}),
+    }
+    const offer = await this.credentials.createOfferInvitation(input)
     const credentialRevocationId = optionalStringProperty(offer, 'credentialRevocationId')
     const revocationRegistryDefinitionId = optionalStringProperty(offer, 'revocationRegistryDefinitionId')
     const invitationId = invitationIdFromUrl(offer.invitationUrl, `unify-oob-${suffixFor(activationId)}`)

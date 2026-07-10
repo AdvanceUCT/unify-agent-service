@@ -19,10 +19,11 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
     asyncHandler(async (req, res) => {
       // Single-offer route stays useful for manual testing and one-off issuance.
       const body = requireObject(req.body)
+      const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
       const result = await credentials.createOfferInvitation({
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
-        revocationRegistryDefinitionId: optionalString(body, 'revocationRegistryDefinitionId'),
         attributes: requireAttributes(body),
+        ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
       })
       res.status(201).json(result)
     })
@@ -38,10 +39,11 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       if (!Array.isArray(students) || students.length === 0) {
         throw new AppError(400, 'students must be a non-empty array.')
       }
+      const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
 
       const result = await credentials.createBatchOfferInvitations({
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
-        revocationRegistryDefinitionId: optionalString(body, 'revocationRegistryDefinitionId'),
+        ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
         students: students.map((student, index) => {
           const value = requireObject(student, `students[${index}]`)
           return {
@@ -66,10 +68,11 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       if (!Array.isArray(students) || students.length === 0) {
         throw new AppError(400, 'students must be a non-empty array.')
       }
+      const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
 
       const result = await activationLinks.createBatchActivationLinks({
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
-        revocationRegistryDefinitionId: optionalString(body, 'revocationRegistryDefinitionId'),
+        ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
         students: students.map((student, index) => {
           const value = requireObject(student, `students[${index}]`)
           return {
