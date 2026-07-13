@@ -8,11 +8,13 @@ export type StoredActivationRecord = {
   activationId: string
   createdAt: string
   credentialExchangeId: string
+  credentialRevocationId?: string
   expiresAt: string
   invitationId: string
   invitationUrl: string
   issuerLabel: string
   tokenHash: string
+  revocationRegistryDefinitionId?: string
 }
 
 type ActivationStoreFile = {

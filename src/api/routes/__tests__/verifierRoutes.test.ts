@@ -33,6 +33,8 @@ function verifierServiceMock() {
     getServicePoint: jest.fn().mockResolvedValue({ id: 'service-point-001' }),
     updateServicePoint: jest.fn().mockResolvedValue({ id: 'service-point-001' }),
     getStatus: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001', status: 'Pending' }),
+    listTrustedCredentialDefinitions: jest.fn().mockResolvedValue([]),
+    registerTrustedCredentialDefinition: jest.fn().mockResolvedValue({ credentialDefinitionId: 'cred-def-001' }),
   }
 }
 
@@ -105,6 +107,25 @@ describe('verifier routes', () => {
       const response = await fetch(`${baseUrl}/proof-requests/verification-001`)
       expect(response.status).toBe(200)
       expect(service.getStatus).toHaveBeenCalledWith('verification-001')
+    })
+  })
+
+  it('registers a trusted credential definition as the default schema policy', async () => {
+    const service = verifierServiceMock()
+    const router = buildVerifierRouter({} as never, service as never)
+
+    await withServer(router, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/credential-definitions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentialDefinitionId: 'cred-def-002', makeDefault: true }),
+      })
+
+      expect(response.status).toBe(201)
+      expect(service.registerTrustedCredentialDefinition).toHaveBeenCalledWith({
+        credentialDefinitionId: 'cred-def-002',
+        makeDefault: true,
+      })
     })
   })
 })

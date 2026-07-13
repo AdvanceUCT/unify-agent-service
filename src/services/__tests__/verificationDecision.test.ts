@@ -11,6 +11,7 @@ const validInput = {
   isVerified: true,
   credentialDefinitionIds: ['cred-def-001'],
   trustedCredentialDefinitionIds: ['cred-def-001'],
+  requiredAttributes: ['studentNumber', 'faculty', 'year'],
   attributes,
 }
 
@@ -59,6 +60,17 @@ describe('evaluateVerification', () => {
         errorMessage: 'revocation registry could not be resolved',
       }),
     ).toEqual({ decision: 'Failed', failureCode: 'REVOCATION_CHECK_FAILED' })
+  })
+
+  it('declines a credential explicitly reported as revoked or suspended', () => {
+    expect(
+      evaluateVerification({
+        ...validInput,
+        state: 'abandoned',
+        isVerified: false,
+        errorMessage: 'Credential does not satisfy the non-revocation interval because credential is revoked',
+      }),
+    ).toEqual({ decision: 'Declined', failureCode: 'CREDENTIAL_NOT_CURRENT' })
   })
 
   it('keeps non-terminal proof exchanges pending', () => {

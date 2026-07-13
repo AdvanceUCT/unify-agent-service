@@ -18,13 +18,17 @@ type StudentActivationInput = {
   externalId?: string
 }
 
+type CredentialOfferInput = Parameters<CredentialService['createOfferInvitation']>[0]
+
 export type BatchActivationLinkResult = {
   failures: Array<{ email?: string; externalId?: string; message: string }>
   offers: Array<{
     activationId: string
     activationUrl: string
     credentialExchangeId: string
+    credentialRevocationId?: string
     outOfBandId: string
+    revocationRegistryDefinitionId?: string
     email?: string
     expiresAt: string
     externalId?: string
@@ -56,6 +60,22 @@ function expiresAtFrom(createdAt: Date): string {
   return expiresAt.toISOString()
 }
 
+function optionalStringProperty(value: object, key: string): string | undefined {
+  const property = (value as Record<string, unknown>)[key]
+  return typeof property === 'string' && property ? property : undefined
+}
+
+function withRevocationRegistryDefinitionId<T extends object>(
+  input: T,
+  revocationRegistryDefinitionId?: string,
+): T & { revocationRegistryDefinitionId?: string } {
+  if (revocationRegistryDefinitionId) {
+    ;(input as Record<string, unknown>).revocationRegistryDefinitionId = revocationRegistryDefinitionId
+  }
+
+  return input as T & { revocationRegistryDefinitionId?: string }
+}
+
 export class ActivationLinkService {
   private readonly credentials: CredentialService
 
@@ -68,6 +88,7 @@ export class ActivationLinkService {
 
   async createBatchActivationLinks(params: {
     credentialDefinitionId: string
+    revocationRegistryDefinitionId?: string
     students: StudentActivationInput[]
   }): Promise<BatchActivationLinkResult> {
     const offers: BatchActivationLinkResult['offers'] = []
@@ -75,15 +96,22 @@ export class ActivationLinkService {
 
     for (const student of params.students) {
       try {
-        const offer = await this.createActivationLink({
+        const input: {
+          credentialDefinitionId: string
+          revocationRegistryDefinitionId?: string
+          student: StudentActivationInput
+        } = {
           credentialDefinitionId: params.credentialDefinitionId,
           student,
-        })
+        }
+        const offer = await this.createActivationLink(
+          withRevocationRegistryDefinitionId(input, params.revocationRegistryDefinitionId),
+        )
         offers.push(offer)
       } catch (error) {
         failures.push({
-          email: student.email,
-          externalId: student.externalId,
+          ...(student.email ? { email: student.email } : {}),
+          ...(student.externalId ? { externalId: student.externalId } : {}),
           message: error instanceof Error ? error.message : String(error),
         })
       }
@@ -94,15 +122,21 @@ export class ActivationLinkService {
 
   private async createActivationLink(params: {
     credentialDefinitionId: string
+    revocationRegistryDefinitionId?: string
     student: StudentActivationInput
   }): Promise<BatchActivationLinkResult['offers'][number]> {
     const token = generateActivationToken()
     const activationId = generateActivationId()
     const createdAt = new Date()
-    const offer = await this.credentials.createOfferInvitation({
+    const input: CredentialOfferInput = {
       attributes: params.student.attributes,
       credentialDefinitionId: params.credentialDefinitionId,
-    })
+    }
+    const offer = await this.credentials.createOfferInvitation(
+      withRevocationRegistryDefinitionId(input, params.revocationRegistryDefinitionId),
+    )
+    const credentialRevocationId = optionalStringProperty(offer, 'credentialRevocationId')
+    const revocationRegistryDefinitionId = optionalStringProperty(offer, 'revocationRegistryDefinitionId')
     const invitationId = invitationIdFromUrl(offer.invitationUrl, `unify-oob-${suffixFor(activationId)}`)
     const expiresAt = expiresAtFrom(createdAt)
     // Only the token hash is stored so a leaked activation store cannot open offers.
@@ -116,17 +150,31 @@ export class ActivationLinkService {
       issuerLabel: config.activations.issuerLabel,
       tokenHash: hashActivationToken(token),
     }
+    if (credentialRevocationId) {
+      record.credentialRevocationId = credentialRevocationId
+    }
+    if (revocationRegistryDefinitionId) {
+      record.revocationRegistryDefinitionId = revocationRegistryDefinitionId
+    }
 
     await this.store.save(record)
 
-    return {
+    const result: BatchActivationLinkResult['offers'][number] = {
       activationId,
       activationUrl: activationUrlForToken(token),
       credentialExchangeId: offer.credentialExchangeId,
       outOfBandId: offer.outOfBandId,
-      email: params.student.email,
       expiresAt,
-      externalId: params.student.externalId,
+      ...(params.student.email ? { email: params.student.email } : {}),
+      ...(params.student.externalId ? { externalId: params.student.externalId } : {}),
     }
+    if (credentialRevocationId) {
+      result.credentialRevocationId = credentialRevocationId
+    }
+    if (revocationRegistryDefinitionId) {
+      result.revocationRegistryDefinitionId = revocationRegistryDefinitionId
+    }
+
+    return result
   }
 }

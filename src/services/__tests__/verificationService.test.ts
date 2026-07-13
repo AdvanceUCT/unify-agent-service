@@ -28,6 +28,23 @@ function makeAgent() {
   }
 
   const agent = {
+    modules: {
+      anoncreds: {
+        getCredentialDefinition: jest.fn().mockResolvedValue({
+          credentialDefinition: {
+            schemaId: 'schema-001',
+            value: { revocation: { g: 'revocation-public-key' } },
+          },
+        }),
+        getSchema: jest.fn().mockResolvedValue({
+          schema: {
+            attrNames: ['studentNumber', 'faculty', 'year'],
+            name: 'StudentIdentity',
+            version: '1.0',
+          },
+        }),
+      },
+    },
     proofs: {
       createRequest: jest.fn().mockImplementation(async () => ({
         message: { '@id': 'proof-request-message' },
@@ -160,9 +177,9 @@ describe('VerificationService', () => {
     expect(agent.proofs.createRequest).not.toHaveBeenCalled()
   })
 
-  it('adds a current non-revocation interval when enabled', async () => {
+  it('always adds a current non-revocation interval', async () => {
     const { agent } = makeAgent()
-    const service = serviceFor(agent, { requireNonRevoked: true })
+    const service = serviceFor(agent)
     const point = await registeredPoint(service)
 
     await service.startSession({
@@ -178,6 +195,118 @@ describe('VerificationService', () => {
         },
       }),
     )
+  })
+
+  it('requests every attribute from the selected schema version', async () => {
+    const { agent } = makeAgent()
+    agent.modules.anoncreds.getCredentialDefinition.mockResolvedValueOnce({
+      credentialDefinition: {
+        schemaId: 'schema-002',
+        value: { revocation: { g: 'revocation-public-key' } },
+      },
+    })
+    agent.modules.anoncreds.getSchema.mockResolvedValueOnce({
+      schema: {
+        attrNames: ['studentNumber', 'faculty', 'year', 'programme'],
+        name: 'StudentIdentity',
+        version: '2.0',
+      },
+    })
+    const service = serviceFor(agent)
+    await service.registerTrustedCredentialDefinition({
+      credentialDefinitionId: 'cred-def-002',
+      makeDefault: true,
+    })
+    const point = await registeredPoint(service)
+
+    await service.startSession({
+      publicServicePointId: point.publicId,
+      clientRequestId: 'client-v2',
+      requestIp: '192.0.2.1',
+    })
+
+    expect(agent.proofs.createRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proofFormats: {
+          anoncreds: expect.objectContaining({
+            requested_attributes: {
+              student_details: {
+                names: ['studentNumber', 'faculty', 'year', 'programme'],
+                restrictions: [{ cred_def_id: 'cred-def-002' }],
+              },
+            },
+          }),
+        },
+      }),
+    )
+  })
+
+  it('keeps an existing service point bound to its original schema version', async () => {
+    const { agent } = makeAgent()
+    const service = serviceFor(agent)
+    const oldPoint = await registeredPoint(service)
+
+    agent.modules.anoncreds.getCredentialDefinition.mockResolvedValueOnce({
+      credentialDefinition: {
+        schemaId: 'schema-002',
+        value: { revocation: { g: 'revocation-public-key' } },
+      },
+    })
+    agent.modules.anoncreds.getSchema.mockResolvedValueOnce({
+      schema: {
+        attrNames: ['studentNumber', 'faculty', 'year', 'programme'],
+        name: 'StudentIdentity',
+        version: '2.0',
+      },
+    })
+    await service.registerTrustedCredentialDefinition({
+      credentialDefinitionId: 'cred-def-002',
+      makeDefault: true,
+    })
+
+    await service.startSession({
+      publicServicePointId: oldPoint.publicId,
+      clientRequestId: 'client-old-schema',
+      requestIp: '192.0.2.1',
+    })
+
+    expect(agent.proofs.createRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proofFormats: {
+          anoncreds: expect.objectContaining({
+            requested_attributes: {
+              student_details: {
+                names: ['studentNumber', 'faculty', 'year'],
+                restrictions: [{ cred_def_id: 'cred-def-001' }],
+              },
+            },
+          }),
+        },
+      }),
+    )
+  })
+
+  it('rejects a trusted credential definition without revocation support', async () => {
+    const { agent } = makeAgent()
+    agent.modules.anoncreds.getCredentialDefinition.mockResolvedValueOnce({
+      credentialDefinition: { schemaId: 'schema-001', value: {} },
+    })
+    const service = serviceFor(agent)
+
+    await expect(
+      registeredPoint(service),
+    ).rejects.toMatchObject({ code: 'TRUSTED_CREDENTIAL_DEFINITION_NOT_REVOCABLE' })
+    expect(agent.proofs.createRequest).not.toHaveBeenCalled()
+  })
+
+  it('reports an unavailable trusted credential definition as configuration failure', async () => {
+    const { agent } = makeAgent()
+    agent.modules.anoncreds.getCredentialDefinition.mockRejectedValueOnce(new Error('ledger unavailable'))
+    const service = serviceFor(agent)
+
+    await expect(
+      registeredPoint(service),
+    ).rejects.toMatchObject({ code: 'TRUSTED_CREDENTIAL_DEFINITION_UNAVAILABLE' })
   })
 
   it('returns the same session for duplicate mobile requests', async () => {
@@ -279,18 +408,11 @@ describe('VerificationService', () => {
     })
   })
 
-  it('rejects session creation when the trusted allowlist is empty', async () => {
+  it('rejects service-point creation when no trusted schema is configured', async () => {
     const { agent } = makeAgent()
     const service = serviceFor(agent, { trustedCredentialDefinitionIds: [] })
-    const point = await registeredPoint(service)
 
-    await expect(
-      service.startSession({
-        publicServicePointId: point.publicId,
-        clientRequestId: 'client-001',
-        requestIp: '192.0.2.1',
-      }),
-    ).rejects.toMatchObject({ code: 'VERIFIER_NOT_CONFIGURED' })
+    await expect(registeredPoint(service)).rejects.toMatchObject({ code: 'VERIFIER_NOT_CONFIGURED' })
     expect(agent.proofs.createRequest).not.toHaveBeenCalled()
   })
 

@@ -8,21 +8,37 @@ import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireAttributes, requireObject, requireString } from '../validation'
 
+function withRevocationRegistryDefinitionId<T extends object>(
+  input: T,
+  revocationRegistryDefinitionId?: string,
+): T & { revocationRegistryDefinitionId?: string } {
+  if (revocationRegistryDefinitionId) {
+    ;(input as Record<string, unknown>).revocationRegistryDefinitionId = revocationRegistryDefinitionId
+  }
+
+  return input as T & { revocationRegistryDefinitionId?: string }
+}
+
 export function buildCredentialsRouter(agent: UniversityAgent): Router {
   const router = Router()
   const activationLinks = new ActivationLinkService(agent)
   const credentials = new CredentialService(agent)
   const revocations = new RevocationService(agent)
+  type CredentialOfferInput = Parameters<typeof credentials.createOfferInvitation>[0]
 
   router.post(
     '/offers',
     asyncHandler(async (req, res) => {
       // Single-offer route stays useful for manual testing and one-off issuance.
       const body = requireObject(req.body)
-      const result = await credentials.createOfferInvitation({
+      const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
+      const input: CredentialOfferInput = {
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
         attributes: requireAttributes(body),
-      })
+      }
+      const result = await credentials.createOfferInvitation(
+        withRevocationRegistryDefinitionId(input, revocationRegistryDefinitionId),
+      )
       res.status(201).json(result)
     })
   )
@@ -37,8 +53,17 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       if (!Array.isArray(students) || students.length === 0) {
         throw new AppError(400, 'students must be a non-empty array.')
       }
+      const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
 
-      const result = await credentials.createBatchOfferInvitations({
+      const input: {
+        credentialDefinitionId: string
+        revocationRegistryDefinitionId?: string
+        students: Array<{
+          externalId?: string
+          email?: string
+          attributes: Array<{ name: string; value: string }>
+        }>
+      } = {
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
         students: students.map((student, index) => {
           const value = requireObject(student, `students[${index}]`)
@@ -48,7 +73,10 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
             attributes: requireAttributes(value),
           }
         }),
-      })
+      }
+      const result = await credentials.createBatchOfferInvitations(
+        withRevocationRegistryDefinitionId(input, revocationRegistryDefinitionId),
+      )
 
       res.status(201).json(result)
     })
@@ -64,8 +92,17 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       if (!Array.isArray(students) || students.length === 0) {
         throw new AppError(400, 'students must be a non-empty array.')
       }
+      const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
 
-      const result = await activationLinks.createBatchActivationLinks({
+      const input: {
+        credentialDefinitionId: string
+        revocationRegistryDefinitionId?: string
+        students: Array<{
+          externalId?: string
+          email?: string
+          attributes: Array<{ name: string; value: string }>
+        }>
+      } = {
         credentialDefinitionId: requireString(body, 'credentialDefinitionId'),
         students: students.map((student, index) => {
           const value = requireObject(student, `students[${index}]`)
@@ -75,7 +112,10 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
             attributes: requireAttributes(value),
           }
         }),
-      })
+      }
+      const result = await activationLinks.createBatchActivationLinks(
+        withRevocationRegistryDefinitionId(input, revocationRegistryDefinitionId),
+      )
 
       res.status(201).json(result)
     })
@@ -97,6 +137,37 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       // The Admin Portal polls this after issuance returns a credentialExchangeId.
       const result = await credentials.getStatus(req.params.id)
       res.json(result)
+    })
+  )
+
+  router.post(
+    '/:id/suspend',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body ?? {})
+      const result = await revocations.suspend({
+        credentialExchangeId: req.params.id,
+        reason: optionalString(body, 'reason'),
+      })
+      res.json(result)
+    })
+  )
+
+  router.post(
+    '/:id/reactivate',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body ?? {})
+      const result = await revocations.reactivate({
+        credentialExchangeId: req.params.id,
+        reason: optionalString(body, 'reason'),
+      })
+      res.json(result)
+    })
+  )
+
+  router.get(
+    '/:id/lifecycle',
+    asyncHandler(async (req, res) => {
+      res.json(await revocations.getLifecycle(req.params.id))
     })
   )
 

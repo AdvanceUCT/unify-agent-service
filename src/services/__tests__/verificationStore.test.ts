@@ -69,6 +69,34 @@ describe('VerificationStore', () => {
     })
   })
 
+  it('keeps exactly one default trusted schema policy', async () => {
+    const store = new VerificationStore(filePath)
+    const base = {
+      active: true,
+      attributes: ['studentNumber'],
+      createdAt: '2026-06-23T10:00:00.000Z',
+      isDefault: false,
+      schemaId: 'schema-1',
+      schemaName: 'StudentIdentity',
+      schemaVersion: '1.0',
+      updatedAt: '2026-06-23T10:00:00.000Z',
+    }
+
+    await store.upsertTrustedCredentialDefinition(
+      { ...base, credentialDefinitionId: 'cred-def-1' },
+      true,
+    )
+    await store.upsertTrustedCredentialDefinition(
+      { ...base, credentialDefinitionId: 'cred-def-2', schemaId: 'schema-2', schemaVersion: '2.0' },
+      true,
+    )
+
+    const records = await store.listTrustedCredentialDefinitions()
+    expect(records.filter((record) => record.isDefault)).toEqual([
+      expect.objectContaining({ credentialDefinitionId: 'cred-def-2' }),
+    ])
+  })
+
   it('finds sessions using the wallet idempotency key', async () => {
     const store = new VerificationStore(filePath)
     await store.insertSession(session(1))

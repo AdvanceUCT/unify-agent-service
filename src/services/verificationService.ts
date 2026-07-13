@@ -10,9 +10,9 @@ import { evaluateVerification } from './verificationDecision'
 import { VerificationRateLimiter } from './verificationRateLimiter'
 import { getVerificationStore, type VerificationStore } from './verificationStore'
 import {
-  VERIFICATION_ATTRIBUTES,
   type RevealedVerificationAttributes,
   type ServicePointRecord,
+  type TrustedCredentialDefinitionRecord,
   type VerificationDecision,
   type VerificationFailureCode,
   type VerificationSessionRecord,
@@ -52,7 +52,6 @@ type VerificationServiceOptions = {
   now?: () => Date
   rateLimiter?: VerificationRateLimiter
   trustedCredentialDefinitionIds?: string[]
-  requireNonRevoked?: boolean
   sessionTtlMinutes?: number
   resultVisibilityMinutes?: number
   maxPendingPerServicePoint?: number
@@ -75,7 +74,6 @@ export class VerificationService {
   private readonly now: () => Date
   private readonly rateLimiter: VerificationRateLimiter
   private readonly trustedCredentialDefinitionIds: string[]
-  private readonly requireNonRevoked: boolean
   private readonly sessionTtlMinutes: number
   private readonly resultVisibilityMinutes: number
   private readonly maxPendingPerServicePoint: number
@@ -90,7 +88,6 @@ export class VerificationService {
     this.now = options.now ?? (() => new Date())
     this.trustedCredentialDefinitionIds =
       options.trustedCredentialDefinitionIds ?? config.verifier.trustedCredentialDefinitionIds
-    this.requireNonRevoked = options.requireNonRevoked ?? config.verifier.requireNonRevoked
     this.sessionTtlMinutes = options.sessionTtlMinutes ?? config.verifier.sessionTtlMinutes
     this.resultVisibilityMinutes = options.resultVisibilityMinutes ?? config.verifier.resultVisibilityMinutes
     this.maxPendingPerServicePoint =
@@ -109,7 +106,9 @@ export class VerificationService {
     vendorName: string
     externalId: string
     name: string
+    credentialDefinitionId?: string
   }): Promise<ServicePointRecord & { verificationUrl: string }> {
+    const policy = await this.selectTrustedCredentialDefinition(input.credentialDefinitionId)
     const now = this.now().toISOString()
     const record: ServicePointRecord = {
       id: generateId('service-point'),
@@ -118,6 +117,7 @@ export class VerificationService {
       vendorName: input.vendorName,
       externalId: input.externalId,
       name: input.name,
+      credentialDefinitionId: policy.credentialDefinitionId,
       active: true,
       createdAt: now,
       updatedAt: now,
@@ -142,13 +142,17 @@ export class VerificationService {
 
   async updateServicePoint(
     id: string,
-    input: { name?: string; vendorName?: string; active?: boolean },
+    input: { name?: string; vendorName?: string; active?: boolean; credentialDefinitionId?: string },
   ): Promise<ServicePointRecord & { verificationUrl: string }> {
+    const policy = input.credentialDefinitionId
+      ? await this.selectTrustedCredentialDefinition(input.credentialDefinitionId)
+      : undefined
     const updated = await this.store.updateServicePoint(id, (record) => ({
       ...record,
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.vendorName !== undefined ? { vendorName: input.vendorName } : {}),
       ...(input.active !== undefined ? { active: input.active } : {}),
+      ...(policy ? { credentialDefinitionId: policy.credentialDefinitionId } : {}),
       updatedAt: this.now().toISOString(),
     }))
 
@@ -206,7 +210,7 @@ export class VerificationService {
       }
 
       this.rateLimiter.check(input.requestIp, servicePoint.id, this.now().getTime())
-      this.assertVerifierConfigured()
+      const policy = await this.policyForServicePoint(servicePoint)
 
       const proofFormats = {
         anoncreds: {
@@ -214,16 +218,12 @@ export class VerificationService {
           version: '1.0',
           requested_attributes: {
             student_details: {
-              names: [...VERIFICATION_ATTRIBUTES],
-              restrictions: this.trustedCredentialDefinitionIds.map((credentialDefinitionId) => ({
-                cred_def_id: credentialDefinitionId,
-              })),
+              names: [...policy.attributes],
+              restrictions: [{ cred_def_id: policy.credentialDefinitionId }],
             },
           },
           requested_predicates: {},
-          ...(this.requireNonRevoked
-            ? { non_revoked: { to: Math.floor(this.now().getTime() / 1000) } }
-            : {}),
+          non_revoked: { to: Math.floor(this.now().getTime() / 1000) },
         },
       }
 
@@ -271,6 +271,9 @@ export class VerificationService {
         expiresAt: addMinutes(createdAt, this.sessionTtlMinutes).toISOString(),
         state: proofRecord.state,
         decision: 'Pending',
+        credentialDefinitionId: policy.credentialDefinitionId,
+        requestedAttributes: [...policy.attributes],
+        nonRevocationRequested: true,
       }
 
       await this.store.insertSession(session)
@@ -376,6 +379,9 @@ export class VerificationService {
     providedProofRecord?: ProofExchangeRecord,
   ): Promise<VerificationStatusResult> {
     const servicePoint = await this.getServicePoint(session.servicePointId)
+    const policy = await this.policyForServicePoint(servicePoint)
+    const requestedAttributes = session.requestedAttributes ?? policy.attributes
+    const credentialDefinitionId = session.credentialDefinitionId ?? policy.credentialDefinitionId
     if (session.proofRecordDeletedAt) {
       return this.statusFromStoredSession(session, servicePoint)
     }
@@ -387,7 +393,7 @@ export class VerificationService {
     if (!session.proofRecordDeletedAt) {
       proofRecord ??= await this.agent.proofs.findById(session.proofRecordId) ?? undefined
       if (proofRecord?.state === 'done' && proofRecord.isVerified === true) {
-        const presentation = await this.presentationFor(session.proofRecordId)
+        const presentation = await this.presentationFor(session.proofRecordId, requestedAttributes)
         attributes = presentation.attributes
         credentialDefinitionIds = presentation.credentialDefinitionIds
       }
@@ -408,7 +414,8 @@ export class VerificationService {
       isVerified: proofRecord?.isVerified ?? session.isVerified,
       errorMessage: proofRecordMissing ? 'Credo proof record is missing.' : proofRecord?.errorMessage,
       credentialDefinitionIds,
-      trustedCredentialDefinitionIds: this.trustedCredentialDefinitionIds,
+      trustedCredentialDefinitionIds: [credentialDefinitionId],
+      requiredAttributes: requestedAttributes,
       attributes,
       expired,
     })
@@ -472,7 +479,7 @@ export class VerificationService {
     }
   }
 
-  private async presentationFor(proofRecordId: string): Promise<{
+  private async presentationFor(proofRecordId: string, requestedAttributes: string[]): Promise<{
     attributes?: Partial<RevealedVerificationAttributes>
     credentialDefinitionIds: string[]
   }> {
@@ -484,7 +491,7 @@ export class VerificationService {
       const attributes: Partial<RevealedVerificationAttributes> = {}
       const group = presentation.requested_proof?.revealed_attr_groups?.student_details?.values
       if (group) {
-        for (const name of VERIFICATION_ATTRIBUTES) {
+        for (const name of requestedAttributes) {
           const raw = group[name]?.raw
           if (typeof raw === 'string') attributes[name] = raw
         }
@@ -516,12 +523,13 @@ export class VerificationService {
     suppliedOutOfBandRecord?: Awaited<ReturnType<UniversityAgent['oob']['createInvitation']>>,
   ) {
     const outOfBandRecord = suppliedOutOfBandRecord ?? (await this.agent.oob.getById(session.outOfBandId))
+    const policy = await this.policyForServicePoint(servicePoint)
     return {
       verificationRequestId: session.verificationRequestId,
       invitationUrl: outOfBandRecord.outOfBandInvitation.toUrl({ domain: config.agent.endpoint }),
       vendorName: servicePoint.vendorName,
       servicePointName: servicePoint.name,
-      requestedAttributes: VERIFICATION_ATTRIBUTES,
+      requestedAttributes: session.requestedAttributes ?? policy.attributes,
       expiresAt: session.expiresAt,
       resultToken: this.resultTokenFor(session.verificationRequestId),
     }
@@ -557,15 +565,156 @@ export class VerificationService {
     }
   }
 
-  private assertVerifierConfigured(): void {
-    if (this.trustedCredentialDefinitionIds.length === 0) {
+  private async ensureConfiguredPolicies(): Promise<TrustedCredentialDefinitionRecord[]> {
+    let records = await this.store.listTrustedCredentialDefinitions()
+
+    if (records.length === 0) {
+      for (const credentialDefinitionId of this.trustedCredentialDefinitionIds) {
+        const hasDefault = records.some((record) => record.active && record.isDefault)
+        await this.registerTrustedCredentialDefinition({
+          credentialDefinitionId,
+          makeDefault: !hasDefault,
+        })
+        records = await this.store.listTrustedCredentialDefinitions()
+      }
+    }
+
+    const active = records.filter((record) => record.active)
+    if (active.length === 0) {
       throw new AppError(
         503,
-        'No trusted credential definition ids are configured for verification.',
+        'No trusted credential definitions are configured for verification.',
         undefined,
         'VERIFIER_NOT_CONFIGURED',
       )
     }
+    return active
+  }
+
+  private async selectTrustedCredentialDefinition(
+    credentialDefinitionId?: string,
+  ): Promise<TrustedCredentialDefinitionRecord> {
+    const active = await this.ensureConfiguredPolicies()
+    if (credentialDefinitionId) {
+      const selected = active.find((record) => record.credentialDefinitionId === credentialDefinitionId)
+      if (!selected) {
+        throw new AppError(
+          400,
+          'The selected credential definition is not trusted for verification.',
+          { credentialDefinitionId },
+          'CREDENTIAL_DEFINITION_NOT_TRUSTED',
+        )
+      }
+      return selected
+    }
+
+    const defaultPolicy = active.find((record) => record.isDefault)
+    if (defaultPolicy) return defaultPolicy
+    if (active.length === 1) return active[0]
+
+    throw new AppError(
+      503,
+      'Multiple trusted credential definitions exist, but none is the default.',
+      undefined,
+      'DEFAULT_CREDENTIAL_DEFINITION_NOT_CONFIGURED',
+    )
+  }
+
+  private async policyForServicePoint(servicePoint: ServicePointRecord) {
+    const policy = await this.selectTrustedCredentialDefinition(servicePoint.credentialDefinitionId)
+    if (!servicePoint.credentialDefinitionId) {
+      await this.store.updateServicePoint(servicePoint.id, (record) => ({
+        ...record,
+        credentialDefinitionId: policy.credentialDefinitionId,
+        updatedAt: this.now().toISOString(),
+      }))
+    }
+    return policy
+  }
+
+  async registerTrustedCredentialDefinition(input: {
+    credentialDefinitionId: string
+    makeDefault?: boolean
+  }): Promise<TrustedCredentialDefinitionRecord> {
+    const existing = await this.store.findTrustedCredentialDefinition(input.credentialDefinitionId)
+    let credentialDefinitionResult: Awaited<
+      ReturnType<UniversityAgent['modules']['anoncreds']['getCredentialDefinition']>
+    >
+    try {
+      credentialDefinitionResult = await this.agent.modules.anoncreds.getCredentialDefinition(
+        input.credentialDefinitionId,
+      )
+    } catch (error) {
+      throw new AppError(
+        503,
+        `Credential definition ${input.credentialDefinitionId} could not be resolved: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { credentialDefinitionId: input.credentialDefinitionId },
+        'TRUSTED_CREDENTIAL_DEFINITION_UNAVAILABLE',
+      )
+    }
+    const credentialDefinition = credentialDefinitionResult.credentialDefinition
+    if (!credentialDefinition) {
+      throw new AppError(
+        422,
+        `Credential definition ${input.credentialDefinitionId} could not be resolved.`,
+        { credentialDefinitionId: input.credentialDefinitionId },
+        'TRUSTED_CREDENTIAL_DEFINITION_UNAVAILABLE',
+      )
+    }
+    if (!credentialDefinition.value.revocation) {
+      throw new AppError(
+        409,
+        `Credential definition ${input.credentialDefinitionId} does not support revocation.`,
+        { credentialDefinitionId: input.credentialDefinitionId },
+        'TRUSTED_CREDENTIAL_DEFINITION_NOT_REVOCABLE',
+      )
+    }
+
+    let schemaResult: Awaited<ReturnType<UniversityAgent['modules']['anoncreds']['getSchema']>>
+    try {
+      schemaResult = await this.agent.modules.anoncreds.getSchema(credentialDefinition.schemaId)
+    } catch (error) {
+      throw new AppError(
+        503,
+        `Schema ${credentialDefinition.schemaId} could not be resolved: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { schemaId: credentialDefinition.schemaId },
+        'TRUSTED_SCHEMA_UNAVAILABLE',
+      )
+    }
+    const schema = schemaResult.schema
+    if (!schema || schema.attrNames.length === 0) {
+      throw new AppError(
+        422,
+        `Schema ${credentialDefinition.schemaId} could not be resolved or has no attributes.`,
+        { schemaId: credentialDefinition.schemaId },
+        'TRUSTED_SCHEMA_UNAVAILABLE',
+      )
+    }
+
+    const timestamp = this.now().toISOString()
+    return this.store.upsertTrustedCredentialDefinition(
+      {
+        credentialDefinitionId: input.credentialDefinitionId,
+        schemaId: credentialDefinition.schemaId,
+        schemaName: schema.name,
+        schemaVersion: schema.version,
+        attributes: [...schema.attrNames],
+        active: true,
+        isDefault: existing?.isDefault ?? false,
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      },
+      input.makeDefault ?? false,
+    )
+  }
+
+  async listTrustedCredentialDefinitions(): Promise<TrustedCredentialDefinitionRecord[]> {
+    await this.ensureConfiguredPolicies()
+    return this.store.listTrustedCredentialDefinitions()
   }
 
   private async withCreationLock<T>(operation: () => Promise<T>): Promise<T> {
