@@ -5,7 +5,10 @@ import { VerificationService } from '../../services/verificationService'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireObject, requireString } from '../validation'
 
-type WalletVerificationRouteService = Pick<VerificationService, 'getWalletResult' | 'startSession'>
+type WalletVerificationRouteService = Pick<
+  VerificationService,
+  'claimCheckoutSession' | 'getWalletResult' | 'startSession'
+>
 
 function bearerToken(header: string | undefined): string | undefined {
   if (!header) return undefined
@@ -39,6 +42,18 @@ export function buildWalletVerificationRouter(
         req.params.verificationRequestId,
         bearerToken(req.header('authorization')),
       )
+      res.json(result)
+    }),
+  )
+
+  router.post(
+    '/sessions/:verificationRequestId/claim',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body)
+      const result = await verifier.claimCheckoutSession({
+        verificationRequestId: req.params.verificationRequestId,
+        claimToken: requireString(body, 'claimToken'),
+      })
       res.json(result)
     }),
   )

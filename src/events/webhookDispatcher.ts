@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 
 import { config } from '../config'
 
@@ -36,25 +36,25 @@ export type CredentialLifecycleChangedWebhookPayload = {
   type: 'credential.lifecycleChanged'
 }
 
-export type ProofStateChangedWebhookPayload = {
+export type VerificationCompletedWebhookPayload = {
+  eventId: string
   verificationRequestId: string
-  proofRecordId: string
+  checkoutId?: string
   vendorId: string
   servicePointId: string
-  previousState: string | null
-  state: string
-  isVerified?: boolean
   decision: string
   failureCode?: string
+  expiresAt: string
+  completedAt: string
   timestamp: string
-  type: 'proof.stateChanged'
+  type: 'verification.completed'
 }
 
 export type WebhookPayload =
   | ConnectionStateChangedWebhookPayload
   | CredentialStateChangedWebhookPayload
   | CredentialLifecycleChangedWebhookPayload
-  | ProofStateChangedWebhookPayload
+  | VerificationCompletedWebhookPayload
 
 type FetchLike = (
   url: string,
@@ -70,6 +70,7 @@ type WebhookLogger = Pick<Console, 'warn'>
 export type WebhookDispatchOptions = {
   fetchFn?: FetchLike
   logger?: WebhookLogger
+  requestId?: string
   signingSecret?: string
   url?: string | null
 }
@@ -92,9 +93,11 @@ export async function dispatchWebhook(
   const fetchFn = options.fetchFn ?? globalThis.fetch
   const logger = options.logger ?? console
   const signingSecret = options.signingSecret ?? config.webhooks.signingSecret
+  const requestId = options.requestId ?? randomUUID()
   const body = JSON.stringify(payload)
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Request-ID': requestId,
   }
 
   if (signingSecret) {
@@ -111,12 +114,12 @@ export async function dispatchWebhook(
 
     if (!response.ok) {
       logger.warn(
-        `[events] webhook ${payload.type} failed with ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+        `[events] [${requestId}] webhook ${payload.type} failed with ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
       )
     }
   } catch (error) {
     logger.warn(
-      `[events] webhook ${payload.type} dispatch failed: ${error instanceof Error ? error.message : String(error)}`,
+      `[events] [${requestId}] webhook ${payload.type} dispatch failed: ${error instanceof Error ? error.message : String(error)}`,
     )
   }
 }

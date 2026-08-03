@@ -17,6 +17,7 @@ describe('dispatchWebhook', () => {
 
     await dispatchWebhook(payload, {
       fetchFn,
+      requestId: 'request-001',
       url: 'https://admin.example.test/api/webhooks/agent',
     })
 
@@ -24,6 +25,7 @@ describe('dispatchWebhook', () => {
       body: JSON.stringify(payload),
       headers: {
         'Content-Type': 'application/json',
+        'X-Request-ID': 'request-001',
       },
       method: 'POST',
     })
@@ -36,6 +38,7 @@ describe('dispatchWebhook', () => {
 
     await dispatchWebhook(payload, {
       fetchFn,
+      requestId: 'request-002',
       signingSecret: 'webhook-secret',
       url: 'https://admin.example.test/api/webhooks/agent',
     })
@@ -45,6 +48,7 @@ describe('dispatchWebhook', () => {
       expect.objectContaining({
         headers: {
           'Content-Type': 'application/json',
+          'X-Request-ID': 'request-002',
           'X-Unify-Signature': signature,
         },
       }),
@@ -70,12 +74,13 @@ describe('dispatchWebhook', () => {
       dispatchWebhook(payload, {
         fetchFn,
         logger,
+        requestId: 'request-003',
         url: 'https://admin.example.test/api/webhooks/agent',
       }),
     ).resolves.toBeUndefined()
 
     expect(logger.warn).toHaveBeenCalledWith(
-      '[events] webhook credential.stateChanged failed with 500 Internal Server Error',
+      '[events] [request-003] webhook credential.stateChanged failed with 500 Internal Server Error',
     )
   })
 
@@ -87,28 +92,28 @@ describe('dispatchWebhook', () => {
       dispatchWebhook(payload, {
         fetchFn,
         logger,
+        requestId: 'request-004',
         url: 'https://admin.example.test/api/webhooks/agent',
       }),
     ).resolves.toBeUndefined()
 
     expect(logger.warn).toHaveBeenCalledWith(
-      '[events] webhook credential.stateChanged dispatch failed: network offline',
+      '[events] [request-004] webhook credential.stateChanged dispatch failed: network offline',
     )
   })
 
   it('dispatches proof results without requiring revealed student attributes', async () => {
     const fetchFn = jest.fn().mockResolvedValue({ ok: true, status: 202 })
     const proofPayload: WebhookPayload = {
+      eventId: 'verification:verification-001:2026-06-23T10:00:00.000Z',
       verificationRequestId: 'verification-001',
-      proofRecordId: 'proof-001',
       vendorId: 'vendor-001',
       servicePointId: 'service-point-001',
-      previousState: 'presentation-received',
-      state: 'done',
-      isVerified: true,
       decision: 'Approved',
+      expiresAt: '2026-06-23T10:05:00.000Z',
+      completedAt: '2026-06-23T10:00:00.000Z',
       timestamp: '2026-06-23T10:00:00.000Z',
-      type: 'proof.stateChanged',
+      type: 'verification.completed',
     }
 
     await dispatchWebhook(proofPayload, { fetchFn, url: 'https://admin.example.test/api/webhooks/agent' })

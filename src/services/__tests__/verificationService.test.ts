@@ -197,6 +197,95 @@ describe('VerificationService', () => {
     )
   })
 
+  it('creates an idempotent checkout session without creating a proof before claim', async () => {
+    const { agent } = makeAgent()
+    const service = serviceFor(agent)
+    const point = await registeredPoint(service)
+
+    const first = await service.createCheckoutSession({
+      vendorId: 'vendor-001',
+      servicePointId: point.id,
+      checkoutId: 'cart-001',
+    })
+    const duplicate = await service.createCheckoutSession({
+      vendorId: 'vendor-001',
+      servicePointId: point.id,
+      checkoutId: 'cart-001',
+    })
+
+    expect(duplicate).toEqual(first)
+    expect(first.verificationUrl).toContain(`/verify/checkout/${first.verificationRequestId}`)
+    expect(new URL(first.verificationUrl).searchParams.get('token')).toBeTruthy()
+    expect(agent.proofs.createRequest).not.toHaveBeenCalled()
+  })
+
+  it('atomically claims a checkout session and rejects replay', async () => {
+    const { agent } = makeAgent()
+    const service = serviceFor(agent)
+    const point = await registeredPoint(service)
+    const checkout = await service.createCheckoutSession({
+      vendorId: 'vendor-001',
+      servicePointId: point.id,
+      checkoutId: 'cart-001',
+    })
+    const claimToken = new URL(checkout.verificationUrl).searchParams.get('token') as string
+
+    const claimed = await service.claimCheckoutSession({
+      verificationRequestId: checkout.verificationRequestId,
+      claimToken,
+    })
+
+    expect(claimed.invitationUrl).toBe('https://agent.example.test?oob=proof-invitation')
+    expect(agent.proofs.createRequest).toHaveBeenCalledTimes(1)
+    await expect(
+      service.claimCheckoutSession({
+        verificationRequestId: checkout.verificationRequestId,
+        claimToken,
+      }),
+    ).rejects.toMatchObject({ code: 'VERIFICATION_SESSION_REUSED' })
+    expect(agent.proofs.createRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an invalid checkout claim capability without creating a proof', async () => {
+    const { agent } = makeAgent()
+    const service = serviceFor(agent)
+    const point = await registeredPoint(service)
+    const checkout = await service.createCheckoutSession({
+      vendorId: 'vendor-001',
+      servicePointId: point.id,
+      checkoutId: 'cart-001',
+    })
+
+    await expect(
+      service.claimCheckoutSession({
+        verificationRequestId: checkout.verificationRequestId,
+        claimToken: 'wrong-capability',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_SESSION_CAPABILITY' })
+    expect(agent.proofs.createRequest).not.toHaveBeenCalled()
+  })
+
+  it('rejects an unclaimed checkout session after its service point is disabled', async () => {
+    const { agent } = makeAgent()
+    const service = serviceFor(agent)
+    const point = await registeredPoint(service)
+    const checkout = await service.createCheckoutSession({
+      vendorId: 'vendor-001',
+      servicePointId: point.id,
+      checkoutId: 'cart-001',
+    })
+    const claimToken = new URL(checkout.verificationUrl).searchParams.get('token') as string
+    await service.updateServicePoint(point.id, { active: false })
+
+    await expect(
+      service.claimCheckoutSession({
+        verificationRequestId: checkout.verificationRequestId,
+        claimToken,
+      }),
+    ).rejects.toMatchObject({ code: 'SERVICE_POINT_DISABLED' })
+    expect(agent.proofs.createRequest).not.toHaveBeenCalled()
+  })
+
   it('requests every attribute from the selected schema version', async () => {
     const { agent } = makeAgent()
     agent.modules.anoncreds.getCredentialDefinition.mockResolvedValueOnce({

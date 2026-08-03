@@ -20,20 +20,20 @@ export function registerProofEventHandlers(
 
     try {
       const status = await verifier.handleProofStateChanged(proofRecord)
-      if (!status) return
+      if (!status || status.status === 'Pending' || !status.completedAt) return
 
       void webhookDispatcher({
+        eventId: `verification:${status.verificationRequestId}:${status.completedAt}`,
         verificationRequestId: status.verificationRequestId,
-        proofRecordId: proofRecord.id,
+        ...(status.checkoutId ? { checkoutId: status.checkoutId } : {}),
         vendorId: status.vendorId,
         servicePointId: status.servicePointId,
-        previousState,
-        state: proofRecord.state,
-        isVerified: status.isVerified,
         decision: status.status,
         failureCode: status.failureCode,
+        expiresAt: status.expiresAt,
+        completedAt: status.completedAt,
         timestamp: new Date().toISOString(),
-        type: 'proof.stateChanged',
+        type: 'verification.completed',
       })
     } catch (error) {
       console.warn(

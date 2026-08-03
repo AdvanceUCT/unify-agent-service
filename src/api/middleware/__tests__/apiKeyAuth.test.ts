@@ -115,8 +115,8 @@ describe('apiKeyAuth', () => {
     expect(res.status).not.toHaveBeenCalled()
   })
 
-  it('allows verifier-key reads on verifier routes', () => {
-    const req = makeRequest('/verifier/proof-requests/request-001', `Bearer ${config.verifier.apiKey}`)
+  it('allows agent-key reads on verifier routes', () => {
+    const req = makeRequest('/verifier/proof-requests/request-001', `Bearer ${config.api.key}`)
     const res = makeResponse()
     const next = jest.fn()
 
@@ -125,8 +125,8 @@ describe('apiKeyAuth', () => {
     expect(next).toHaveBeenCalled()
   })
 
-  it('rejects verifier-key writes to service-point management', () => {
-    const req = makeRequest('/verifier/service-points', `Bearer ${config.verifier.apiKey}`, 'POST')
+  it('rejects the retired verifier key on service-point management', () => {
+    const req = makeRequest('/verifier/service-points', 'Bearer dev-verifier-api-key', 'POST')
     const res = makeResponse()
     const next = jest.fn()
 
@@ -136,8 +136,8 @@ describe('apiKeyAuth', () => {
     expect(res.status).toHaveBeenCalledWith(401)
   })
 
-  it('rejects the verifier key on issuer routes', () => {
-    const req = makeRequest('/credentials', `Bearer ${config.verifier.apiKey}`)
+  it('rejects the retired verifier key on issuer routes', () => {
+    const req = makeRequest('/credentials', 'Bearer dev-verifier-api-key')
     const res = makeResponse()
     const next = jest.fn()
 
@@ -145,5 +145,20 @@ describe('apiKeyAuth', () => {
 
     expect(next).not.toHaveBeenCalled()
     expect(res.status).toHaveBeenCalledWith(401)
+  })
+
+  it('allows only the exact checkout claim route without an API key', () => {
+    const allowed = makeRequest('/wallet/verification/sessions/verification-001/claim', undefined, 'POST')
+    const nested = makeRequest('/wallet/verification/sessions/verification-001/claim/details', undefined, 'POST')
+
+    const allowedNext = jest.fn()
+    apiKeyAuth(allowed as never, makeResponse() as never, allowedNext)
+    expect(allowedNext).toHaveBeenCalled()
+
+    const response = makeResponse()
+    const nestedNext = jest.fn()
+    apiKeyAuth(nested as never, response as never, nestedNext)
+    expect(nestedNext).not.toHaveBeenCalled()
+    expect(response.status).toHaveBeenCalledWith(401)
   })
 })

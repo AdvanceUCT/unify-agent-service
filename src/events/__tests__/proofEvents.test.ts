@@ -32,7 +32,8 @@ describe('registerProofEventHandlers', () => {
       vendorId: 'vendor-001',
       servicePointId: 'service-point-001',
       status: 'Approved',
-      isVerified: true,
+      completedAt: '2026-06-23T10:00:00.000Z',
+      expiresAt: '2026-06-23T10:05:00.000Z',
       attributes: { studentNumber: 'VOSCAL100' },
     })
 
@@ -41,14 +42,11 @@ describe('registerProofEventHandlers', () => {
     expect(context.webhookDispatcher).toHaveBeenCalledWith(
       expect.objectContaining({
         verificationRequestId: 'verification-001',
-        proofRecordId: 'proof-001',
+        eventId: 'verification:verification-001:2026-06-23T10:00:00.000Z',
         vendorId: 'vendor-001',
         servicePointId: 'service-point-001',
-        previousState: 'presentation-received',
-        state: 'done',
-        isVerified: true,
         decision: 'Approved',
-        type: 'proof.stateChanged',
+        type: 'verification.completed',
       }),
     )
     expect(JSON.stringify(context.webhookDispatcher.mock.calls[0][0])).not.toContain('studentNumber')

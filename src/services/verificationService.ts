@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import type { ProofExchangeRecord } from '@credo-ts/core'
 
@@ -13,6 +13,7 @@ import {
   type RevealedVerificationAttributes,
   type ServicePointRecord,
   type TrustedCredentialDefinitionRecord,
+  type MinimalVerificationResult,
   type VerificationDecision,
   type VerificationFailureCode,
   type VerificationSessionRecord,
@@ -33,6 +34,7 @@ type AnonCredsPresentation = {
 
 export type VerificationStatusResult = {
   verificationRequestId: string
+  checkoutId?: string
   proofRecordId?: string
   vendorId: string
   servicePointId: string
@@ -162,6 +164,118 @@ export class VerificationService {
     return this.withVerificationUrl(updated)
   }
 
+  async createCheckoutSession(input: {
+    vendorId: string
+    servicePointId: string
+    checkoutId: string
+  }): Promise<{
+    verificationRequestId: string
+    checkoutId: string
+    verificationUrl: string
+    expiresAt: string
+    status: VerificationDecision
+  }> {
+    return this.withCreationLock(async () => {
+      const servicePoint = await this.store.findServicePointById(input.servicePointId)
+      if (!servicePoint || servicePoint.vendorId !== input.vendorId) {
+        throw new AppError(404, 'Service point was not found.', undefined, 'SERVICE_POINT_NOT_FOUND')
+      }
+      if (!servicePoint.active) {
+        throw new AppError(410, 'Service point verification is disabled.', undefined, 'SERVICE_POINT_DISABLED')
+      }
+
+      const existing = await this.store.findSessionByCheckout([servicePoint.id], input.checkoutId)
+      if (existing) return this.checkoutResponse(existing)
+
+      await this.policyForServicePoint(servicePoint)
+      const createdAt = this.now()
+      const verificationRequestId = generateId('verification')
+      const session: VerificationSessionRecord = {
+        verificationRequestId,
+        mode: 'CHECKOUT',
+        checkoutId: input.checkoutId,
+        claimNonceHash: this.claimTokenHash(this.claimTokenFor(verificationRequestId)),
+        servicePointId: servicePoint.id,
+        clientRequestId: `checkout:${input.checkoutId}`,
+        createdAt: createdAt.toISOString(),
+        updatedAt: createdAt.toISOString(),
+        expiresAt: addMinutes(createdAt, this.sessionTtlMinutes).toISOString(),
+        state: 'awaiting-claim',
+        decision: 'Pending',
+      }
+
+      await this.store.insertSession(session)
+      return this.checkoutResponse(session)
+    })
+  }
+
+  async claimCheckoutSession(input: {
+    verificationRequestId: string
+    claimToken: string
+  }): Promise<{
+    verificationRequestId: string
+    invitationUrl: string
+    vendorName: string
+    servicePointName: string
+    requestedAttributes: readonly string[]
+    expiresAt: string
+    resultToken: string
+  }> {
+    const session = await this.store.findSessionById(input.verificationRequestId)
+    if (!session || session.mode !== 'CHECKOUT') {
+      throw new AppError(404, 'Verification session was not found.', undefined, 'VERIFICATION_SESSION_NOT_FOUND')
+    }
+    if (this.now().getTime() >= new Date(session.expiresAt).getTime()) {
+      throw new AppError(410, 'Verification session has expired.', undefined, 'VERIFICATION_SESSION_EXPIRED')
+    }
+
+    const servicePoint = await this.getServicePoint(session.servicePointId)
+    if (!servicePoint.active) {
+      throw new AppError(410, 'Service point verification is disabled.', undefined, 'SERVICE_POINT_DISABLED')
+    }
+
+    const claimed = await this.store.claimSession(
+      input.verificationRequestId,
+      this.claimTokenHash(input.claimToken),
+      this.now().toISOString(),
+    )
+    if (claimed.outcome === 'INVALID') {
+      throw new AppError(401, 'Invalid verification session capability.', undefined, 'INVALID_SESSION_CAPABILITY')
+    }
+    if (claimed.outcome === 'REUSED') {
+      throw new AppError(409, 'Verification session has already been claimed.', undefined, 'VERIFICATION_SESSION_REUSED')
+    }
+    if (!claimed.session) {
+      throw new AppError(404, 'Verification session was not found.', undefined, 'VERIFICATION_SESSION_NOT_FOUND')
+    }
+
+    const policy = await this.policyForServicePoint(servicePoint)
+    try {
+      const exchange = await this.createProofExchange(servicePoint, policy)
+      const updated = await this.store.updateSession(claimed.session.verificationRequestId, (record) => ({
+        ...record,
+        proofRecordId: exchange.proofRecord.id,
+        outOfBandId: exchange.outOfBandRecord.id,
+        state: exchange.proofRecord.state,
+        credentialDefinitionId: policy.credentialDefinitionId,
+        requestedAttributes: [...policy.attributes],
+        nonRevocationRequested: true,
+        updatedAt: this.now().toISOString(),
+      }))
+      return this.startResponse(updated ?? claimed.session, servicePoint, exchange.outOfBandRecord)
+    } catch (error) {
+      await this.store.updateSession(claimed.session.verificationRequestId, (record) => ({
+        ...record,
+        state: 'abandoned',
+        decision: 'Failed',
+        failureCode: 'CREDO_PROTOCOL_ERROR',
+        completedAt: this.now().toISOString(),
+        updatedAt: this.now().toISOString(),
+      }))
+      throw error
+    }
+  }
+
   async startSession(input: {
     publicServicePointId: string
     clientRequestId: string
@@ -227,41 +341,12 @@ export class VerificationService {
         },
       }
 
-      let proofRecord: ProofExchangeRecord
-      let message: unknown
-      try {
-        const created = await this.agent.proofs.createRequest({
-          protocolVersion: 'v2',
-          proofFormats,
-          comment: `Verify a student credential for ${servicePoint.name}`,
-        })
-        proofRecord = created.proofRecord
-        message = created.message
-      } catch (error) {
-        throw new AppError(
-          422,
-          `Credo could not create the proof request: ${error instanceof Error ? error.message : String(error)}`,
-          undefined,
-          'CREDO_PROTOCOL_ERROR',
-        )
-      }
-
-      let outOfBandRecord: Awaited<ReturnType<UniversityAgent['oob']['createInvitation']>>
-      try {
-        outOfBandRecord = await this.agent.oob.createInvitation({ messages: [message as never] })
-      } catch (error) {
-        await this.agent.proofs.deleteById(proofRecord.id).catch(() => undefined)
-        throw new AppError(
-          422,
-          `Credo could not create the proof invitation: ${error instanceof Error ? error.message : String(error)}`,
-          undefined,
-          'CREDO_PROTOCOL_ERROR',
-        )
-      }
+      const { proofRecord, outOfBandRecord } = await this.createProofExchange(servicePoint, policy, proofFormats)
 
       const createdAt = this.now()
       const session: VerificationSessionRecord = {
         verificationRequestId: generateId('verification'),
+        mode: 'STATIC',
         proofRecordId: proofRecord.id,
         outOfBandId: outOfBandRecord.id,
         servicePointId: servicePoint.id,
@@ -357,10 +442,14 @@ export class VerificationService {
         const visibleUntil = latest.detailsVisibleUntil
         if (!visibleUntil || this.now().getTime() < new Date(visibleUntil).getTime()) continue
 
-        const proofRecord = await this.agent.proofs.findById(latest.proofRecordId)
-        if (proofRecord) await this.agent.proofs.deleteById(latest.proofRecordId)
-        const outOfBandRecord = await this.agent.oob.findById(latest.outOfBandId)
-        if (outOfBandRecord) await this.agent.oob.deleteById(latest.outOfBandId)
+        const proofRecord = latest.proofRecordId
+          ? await this.agent.proofs.findById(latest.proofRecordId)
+          : null
+        if (proofRecord && latest.proofRecordId) await this.agent.proofs.deleteById(latest.proofRecordId)
+        const outOfBandRecord = latest.outOfBandId
+          ? await this.agent.oob.findById(latest.outOfBandId)
+          : null
+        if (outOfBandRecord && latest.outOfBandId) await this.agent.oob.deleteById(latest.outOfBandId)
         await this.store.updateSession(latest.verificationRequestId, (record) => ({
           ...record,
           proofRecordDeletedAt: this.now().toISOString(),
@@ -390,7 +479,7 @@ export class VerificationService {
     let attributes: Partial<RevealedVerificationAttributes> | undefined
     let credentialDefinitionIds: string[] = []
 
-    if (!session.proofRecordDeletedAt) {
+    if (!session.proofRecordDeletedAt && session.proofRecordId) {
       proofRecord ??= await this.agent.proofs.findById(session.proofRecordId) ?? undefined
       if (proofRecord?.state === 'done' && proofRecord.isVerified === true) {
         const presentation = await this.presentationFor(session.proofRecordId, requestedAttributes)
@@ -407,7 +496,8 @@ export class VerificationService {
       session.decision === 'Pending' &&
       this.now().getTime() >= new Date(session.expiresAt).getTime() &&
       !proofFinishedBeforeExpiry
-    const proofRecordMissing = !proofRecord && !expired
+    const awaitingClaim = session.mode === 'CHECKOUT' && !session.proofRecordId && !expired
+    const proofRecordMissing = !proofRecord && !expired && !awaitingClaim
 
     const evaluation = evaluateVerification({
       state: proofRecordMissing ? 'abandoned' : proofRecord?.state ?? session.state,
@@ -443,6 +533,7 @@ export class VerificationService {
 
     return {
       verificationRequestId: record.verificationRequestId,
+      ...(record.checkoutId ? { checkoutId: record.checkoutId } : {}),
       ...(record.proofRecordDeletedAt ? {} : { proofRecordId: record.proofRecordId }),
       vendorId: servicePoint.vendorId,
       servicePointId: servicePoint.id,
@@ -465,6 +556,7 @@ export class VerificationService {
   ): VerificationStatusResult {
     return {
       verificationRequestId: record.verificationRequestId,
+      ...(record.checkoutId ? { checkoutId: record.checkoutId } : {}),
       vendorId: servicePoint.vendorId,
       servicePointId: servicePoint.id,
       servicePointName: servicePoint.name,
@@ -522,7 +614,11 @@ export class VerificationService {
     servicePoint: ServicePointRecord,
     suppliedOutOfBandRecord?: Awaited<ReturnType<UniversityAgent['oob']['createInvitation']>>,
   ) {
-    const outOfBandRecord = suppliedOutOfBandRecord ?? (await this.agent.oob.getById(session.outOfBandId))
+    if (!session.outOfBandId && !suppliedOutOfBandRecord) {
+      throw new AppError(409, 'Verification session has not been claimed.', undefined, 'VERIFICATION_SESSION_UNCLAIMED')
+    }
+    const outOfBandId = session.outOfBandId
+    const outOfBandRecord = suppliedOutOfBandRecord ?? (await this.agent.oob.getById(outOfBandId as string))
     const policy = await this.policyForServicePoint(servicePoint)
     return {
       verificationRequestId: session.verificationRequestId,
@@ -589,6 +685,99 @@ export class VerificationService {
       )
     }
     return active
+  }
+
+  private async createProofExchange(
+    servicePoint: ServicePointRecord,
+    policy: TrustedCredentialDefinitionRecord,
+    suppliedProofFormats?: unknown,
+  ): Promise<{
+    proofRecord: ProofExchangeRecord
+    outOfBandRecord: Awaited<ReturnType<UniversityAgent['oob']['createInvitation']>>
+  }> {
+    const proofFormats = suppliedProofFormats ?? {
+      anoncreds: {
+        name: 'UNIFY Student Credential Verification',
+        version: '1.0',
+        requested_attributes: {
+          student_details: {
+            names: [...policy.attributes],
+            restrictions: [{ cred_def_id: policy.credentialDefinitionId }],
+          },
+        },
+        requested_predicates: {},
+        non_revoked: { to: Math.floor(this.now().getTime() / 1000) },
+      },
+    }
+
+    let proofRecord: ProofExchangeRecord
+    let message: unknown
+    try {
+      const created = await this.agent.proofs.createRequest({
+        protocolVersion: 'v2',
+        proofFormats: proofFormats as never,
+        comment: `Verify a student credential for ${servicePoint.name}`,
+      })
+      proofRecord = created.proofRecord
+      message = created.message
+    } catch (error) {
+      throw new AppError(
+        422,
+        `Credo could not create the proof request: ${error instanceof Error ? error.message : String(error)}`,
+        undefined,
+        'CREDO_PROTOCOL_ERROR',
+      )
+    }
+
+    try {
+      const outOfBandRecord = await this.agent.oob.createInvitation({ messages: [message as never] })
+      return { proofRecord, outOfBandRecord }
+    } catch (error) {
+      await this.agent.proofs.deleteById(proofRecord.id).catch(() => undefined)
+      throw new AppError(
+        422,
+        `Credo could not create the proof invitation: ${error instanceof Error ? error.message : String(error)}`,
+        undefined,
+        'CREDO_PROTOCOL_ERROR',
+      )
+    }
+  }
+
+  private claimTokenFor(verificationRequestId: string): string {
+    return createHmac('sha256', this.resultTokenSecret)
+      .update(`checkout-verification-claim:${verificationRequestId}`)
+      .digest('base64url')
+  }
+
+  private claimTokenHash(token: string): string {
+    return createHash('sha256').update(token).digest('hex')
+  }
+
+  private checkoutResponse(session: VerificationSessionRecord) {
+    if (!session.checkoutId) {
+      throw new AppError(500, 'Checkout verification session is missing its checkout id.')
+    }
+    const claimToken = this.claimTokenFor(session.verificationRequestId)
+    return {
+      verificationRequestId: session.verificationRequestId,
+      checkoutId: session.checkoutId,
+      verificationUrl: `${config.verifier.publicBaseUrl}/verify/checkout/${encodeURIComponent(session.verificationRequestId)}?token=${encodeURIComponent(claimToken)}`,
+      expiresAt: session.expiresAt,
+      status: session.decision,
+    }
+  }
+
+  async getResult(id: string): Promise<MinimalVerificationResult> {
+    const status = await this.getStatus(id)
+    return {
+      verificationRequestId: status.verificationRequestId,
+      ...(status.checkoutId ? { checkoutId: status.checkoutId } : {}),
+      status: status.status,
+      ...(status.failureCode ? { failureCode: status.failureCode } : {}),
+      createdAt: status.createdAt,
+      expiresAt: status.expiresAt,
+      ...(status.completedAt ? { completedAt: status.completedAt } : {}),
+    }
   }
 
   private async selectTrustedCredentialDefinition(

@@ -28,11 +28,12 @@ async function withServer(router: Router, action: (baseUrl: string) => Promise<v
 function verifierServiceMock() {
   return {
     createServicePoint: jest.fn().mockResolvedValue({ id: 'service-point-001' }),
+    createCheckoutSession: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001' }),
     listServicePoints: jest.fn().mockResolvedValue([]),
     listSessions: jest.fn().mockResolvedValue([]),
     getServicePoint: jest.fn().mockResolvedValue({ id: 'service-point-001' }),
     updateServicePoint: jest.fn().mockResolvedValue({ id: 'service-point-001' }),
-    getStatus: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001', status: 'Pending' }),
+    getResult: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001', status: 'Pending' }),
     listTrustedCredentialDefinitions: jest.fn().mockResolvedValue([]),
     registerTrustedCredentialDefinition: jest.fn().mockResolvedValue({ credentialDefinitionId: 'cred-def-001' }),
   }
@@ -106,7 +107,31 @@ describe('verifier routes', () => {
     await withServer(router, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/proof-requests/verification-001`)
       expect(response.status).toBe(200)
-      expect(service.getStatus).toHaveBeenCalledWith('verification-001')
+      expect(service.getResult).toHaveBeenCalledWith('verification-001')
+    })
+  })
+
+  it('creates a checkout-bound session from validated identifiers', async () => {
+    const service = verifierServiceMock()
+    const router = buildVerifierRouter({} as never, service as never)
+
+    await withServer(router, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/checkout-sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendorId: 'vendor-001',
+          servicePointId: 'service-point-001',
+          checkoutId: 'cart-001',
+        }),
+      })
+
+      expect(response.status).toBe(201)
+      expect(service.createCheckoutSession).toHaveBeenCalledWith({
+        vendorId: 'vendor-001',
+        servicePointId: 'service-point-001',
+        checkoutId: 'cart-001',
+      })
     })
   })
 
@@ -134,6 +159,7 @@ describe('wallet verification routes', () => {
   it('starts a session with validated wallet identifiers', async () => {
     const service = {
       startSession: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001' }),
+      claimCheckoutSession: jest.fn(),
       getWalletResult: jest.fn(),
     }
     const router = buildWalletVerificationRouter({} as never, service)
@@ -157,7 +183,7 @@ describe('wallet verification routes', () => {
   })
 
   it('rejects malformed wallet requests before creating a proof', async () => {
-    const service = { startSession: jest.fn(), getWalletResult: jest.fn() }
+    const service = { startSession: jest.fn(), claimCheckoutSession: jest.fn(), getWalletResult: jest.fn() }
     const router = buildWalletVerificationRouter({} as never, service as never)
 
     await withServer(router, async (baseUrl) => {
@@ -175,6 +201,7 @@ describe('wallet verification routes', () => {
   it('forwards the result capability without exposing verifier credentials', async () => {
     const service = {
       startSession: jest.fn(),
+      claimCheckoutSession: jest.fn(),
       getWalletResult: jest.fn().mockResolvedValue({ status: 'Pending', expiresAt: '2026-06-23T10:05:00.000Z' }),
     }
     const router = buildWalletVerificationRouter({} as never, service)
@@ -189,6 +216,29 @@ describe('wallet verification routes', () => {
       await expect(response.json()).resolves.toEqual({
         status: 'Pending',
         expiresAt: '2026-06-23T10:05:00.000Z',
+      })
+    })
+  })
+
+  it('forwards a single-use checkout claim to the verification service', async () => {
+    const service = {
+      startSession: jest.fn(),
+      claimCheckoutSession: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001' }),
+      getWalletResult: jest.fn(),
+    }
+    const router = buildWalletVerificationRouter({} as never, service)
+
+    await withServer(router, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/sessions/verification-001/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claimToken: 'single-use-token' }),
+      })
+
+      expect(response.status).toBe(200)
+      expect(service.claimCheckoutSession).toHaveBeenCalledWith({
+        verificationRequestId: 'verification-001',
+        claimToken: 'single-use-token',
       })
     })
   })

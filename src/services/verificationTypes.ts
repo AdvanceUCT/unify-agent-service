@@ -26,8 +26,12 @@ export type ServicePointRecord = {
 
 export type VerificationSessionRecord = {
   verificationRequestId: string
-  proofRecordId: string
-  outOfBandId: string
+  mode?: 'STATIC' | 'CHECKOUT'
+  checkoutId?: string
+  claimNonceHash?: string
+  claimedAt?: string
+  proofRecordId?: string
+  outOfBandId?: string
   servicePointId: string
   clientRequestId: string
   createdAt: string
@@ -43,6 +47,16 @@ export type VerificationSessionRecord = {
   completedAt?: string
   detailsVisibleUntil?: string
   proofRecordDeletedAt?: string
+}
+
+export type MinimalVerificationResult = {
+  verificationRequestId: string
+  checkoutId?: string
+  status: VerificationDecision
+  failureCode?: VerificationFailureCode
+  createdAt: string
+  expiresAt: string
+  completedAt?: string
 }
 
 export type RevealedVerificationAttributes = Record<string, string>

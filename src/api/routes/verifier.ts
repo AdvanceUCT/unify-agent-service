@@ -9,8 +9,9 @@ import { optionalBoolean, optionalString, requireObject, requireString } from '.
 type VerifierRouteService = Pick<
   VerificationService,
   | 'createServicePoint'
+  | 'createCheckoutSession'
   | 'getServicePoint'
-  | 'getStatus'
+  | 'getResult'
   | 'listServicePoints'
   | 'listSessions'
   | 'listTrustedCredentialDefinitions'
@@ -43,6 +44,19 @@ export function buildVerifierRouter(
     '/credential-definitions',
     asyncHandler(async (_req, res) => {
       res.json(await verifier.listTrustedCredentialDefinitions())
+    }),
+  )
+
+  router.post(
+    '/checkout-sessions',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body)
+      const result = await verifier.createCheckoutSession({
+        vendorId: requireString(body, 'vendorId'),
+        servicePointId: requireString(body, 'servicePointId'),
+        checkoutId: requireString(body, 'checkoutId'),
+      })
+      res.status(201).json(result)
     }),
   )
 
@@ -110,7 +124,7 @@ export function buildVerifierRouter(
   router.get(
     '/proof-requests/:id',
     asyncHandler(async (req, res) => {
-      res.json(await verifier.getStatus(req.params.id))
+      res.json(await verifier.getResult(req.params.id))
     }),
   )
 

@@ -9,6 +9,14 @@ function requireEnv(name: string, fallback?: string): string {
   return value
 }
 
+function requireSecret(name: string, fallback: string): string {
+  const value = requireEnv(name, fallback)
+  if (process.env.NODE_ENV === 'production' && (!process.env[name] || value === fallback)) {
+    throw new Error(`Environment variable ${name} must be set to a non-development secret in production`)
+  }
+  return value
+}
+
 function parsePort(name: string, fallback: number): number {
   const raw = process.env[name]
   if (!raw) return fallback
@@ -50,7 +58,7 @@ export const config = {
     // Askar uses this to name the encrypted wallet store.
     walletId: requireEnv('AGENT_WALLET_ID', 'university-agent-wallet'),
     // Never use the fallback wallet key outside a throwaway local container.
-    walletKey: requireEnv('AGENT_WALLET_KEY', 'change-this-to-a-secure-key'),
+    walletKey: requireSecret('AGENT_WALLET_KEY', 'change-this-to-a-secure-key'),
     // This must be reachable by the student wallet, not just by the API server.
     endpoint: requireEnv('AGENT_ENDPOINT', 'http://localhost:3001'),
     port: parsePort('AGENT_PORT', 3001),
@@ -58,11 +66,10 @@ export const config = {
   api: {
     port: apiPort,
     // The fallback is only for local development; deployments must set this explicitly.
-    key: requireEnv('AGENT_API_KEY', 'dev-agent-api-key'),
+    key: requireSecret('AGENT_API_KEY', 'dev-agent-api-key'),
   },
   verifier: {
-    apiKey: requireEnv('VERIFIER_API_KEY', 'dev-verifier-api-key'),
-    resultTokenSecret: requireEnv(
+    resultTokenSecret: requireSecret(
       'VERIFICATION_RESULT_TOKEN_SECRET',
       'dev-verification-result-token-secret',
     ),
