@@ -219,6 +219,22 @@ describe('VerificationService', () => {
     expect(agent.proofs.createRequest).not.toHaveBeenCalled()
   })
 
+  it('does not expose checkout sessions through the in-person details endpoint', async () => {
+    const { agent } = makeAgent()
+    const service = serviceFor(agent)
+    const point = await registeredPoint(service)
+    const checkout = await service.createCheckoutSession({
+      vendorId: 'vendor-001',
+      servicePointId: point.id,
+      checkoutId: 'cart-001',
+    })
+
+    await expect(service.getInPersonDetails(checkout.verificationRequestId)).rejects.toMatchObject({
+      status: 404,
+      code: 'VERIFICATION_REQUEST_NOT_FOUND',
+    })
+  })
+
   it('atomically claims a checkout session and rejects replay', async () => {
     const { agent } = makeAgent()
     const service = serviceFor(agent)
@@ -540,7 +556,7 @@ describe('VerificationService', () => {
     ).rejects.toMatchObject({ code: 'CREDO_PROTOCOL_ERROR' })
   })
 
-  it('returns Approved with the three verified attributes', async () => {
+  it('returns Approved with verified attributes for an in-person request', async () => {
     const agentState = makeAgent()
     const service = serviceFor(agentState.agent)
     const point = await registeredPoint(service)
@@ -551,7 +567,7 @@ describe('VerificationService', () => {
     })
     agentState.setProofRecord({ state: 'done', isVerified: true })
 
-    const status = await service.getStatus(started.verificationRequestId)
+    const status = await service.getInPersonDetails(started.verificationRequestId)
 
     expect(status).toMatchObject({
       status: 'Approved',
@@ -562,6 +578,8 @@ describe('VerificationService', () => {
         year: '2026',
       },
     })
+    expect(status).not.toHaveProperty('proofRecordId')
+    expect(status).not.toHaveProperty('vendorId')
   })
 
   it('reports a missing Credo proof record as a protocol failure', async () => {

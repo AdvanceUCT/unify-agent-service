@@ -33,6 +33,13 @@ function verifierServiceMock() {
     listSessions: jest.fn().mockResolvedValue([]),
     getServicePoint: jest.fn().mockResolvedValue({ id: 'service-point-001' }),
     updateServicePoint: jest.fn().mockResolvedValue({ id: 'service-point-001' }),
+    getInPersonDetails: jest.fn().mockResolvedValue({
+      verificationRequestId: 'verification-001',
+      servicePointId: 'service-point-001',
+      status: 'Approved',
+      isVerified: true,
+      attributes: { studentNumber: 'STU001' },
+    }),
     getResult: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001', status: 'Pending' }),
     listTrustedCredentialDefinitions: jest.fn().mockResolvedValue([]),
     registerTrustedCredentialDefinition: jest.fn().mockResolvedValue({ credentialDefinitionId: 'cred-def-001' }),
@@ -108,6 +115,22 @@ describe('verifier routes', () => {
       const response = await fetch(`${baseUrl}/proof-requests/verification-001`)
       expect(response.status).toBe(200)
       expect(service.getResult).toHaveBeenCalledWith('verification-001')
+    })
+  })
+
+  it('routes transient in-person details separately from the minimal result', async () => {
+    const service = verifierServiceMock()
+    const router = buildVerifierRouter({} as never, service as never)
+
+    await withServer(router, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/proof-requests/verification-001/details`)
+      expect(response.status).toBe(200)
+      expect(service.getInPersonDetails).toHaveBeenCalledWith('verification-001')
+      expect(service.getResult).not.toHaveBeenCalled()
+      await expect(response.json()).resolves.toMatchObject({
+        isVerified: true,
+        attributes: { studentNumber: 'STU001' },
+      })
     })
   })
 

@@ -50,6 +50,20 @@ export type VerificationStatusResult = {
   completedAt?: string
 }
 
+export type InPersonVerificationDetails = Pick<
+  VerificationStatusResult,
+  | 'verificationRequestId'
+  | 'servicePointId'
+  | 'servicePointName'
+  | 'status'
+  | 'isVerified'
+  | 'failureCode'
+  | 'attributes'
+  | 'createdAt'
+  | 'expiresAt'
+  | 'completedAt'
+>
+
 type VerificationServiceOptions = {
   now?: () => Date
   rateLimiter?: VerificationRateLimiter
@@ -410,6 +424,27 @@ export class VerificationService {
     }
 
     return this.syncSession(session)
+  }
+
+  async getInPersonDetails(id: string): Promise<InPersonVerificationDetails> {
+    const session = await this.store.findSessionById(id)
+    if (!session || session.mode === 'CHECKOUT') {
+      throw new AppError(404, 'In-person verification request was not found.', undefined, 'VERIFICATION_REQUEST_NOT_FOUND')
+    }
+
+    const status = await this.syncSession(session)
+    return {
+      verificationRequestId: status.verificationRequestId,
+      servicePointId: status.servicePointId,
+      servicePointName: status.servicePointName,
+      status: status.status,
+      ...(status.isVerified !== undefined ? { isVerified: status.isVerified } : {}),
+      ...(status.failureCode ? { failureCode: status.failureCode } : {}),
+      ...(status.attributes ? { attributes: status.attributes } : {}),
+      createdAt: status.createdAt,
+      expiresAt: status.expiresAt,
+      ...(status.completedAt ? { completedAt: status.completedAt } : {}),
+    }
   }
 
   async listSessions(servicePointId: string): Promise<VerificationStatusResult[]> {

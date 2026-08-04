@@ -11,6 +11,7 @@ type VerifierRouteService = Pick<
   | 'createServicePoint'
   | 'createCheckoutSession'
   | 'getServicePoint'
+  | 'getInPersonDetails'
   | 'getResult'
   | 'listServicePoints'
   | 'listSessions'
@@ -118,6 +119,13 @@ export function buildVerifierRouter(
           credentialDefinitionId,
         }),
       )
+    }),
+  )
+
+  router.get(
+    '/proof-requests/:id/details',
+    asyncHandler(async (req, res) => {
+      res.json(await verifier.getInPersonDetails(req.params.id))
     }),
   )
 
