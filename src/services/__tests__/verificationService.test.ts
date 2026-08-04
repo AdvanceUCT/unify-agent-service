@@ -330,7 +330,7 @@ describe('VerificationService', () => {
     )
   })
 
-  it('keeps an existing service point bound to its original schema version', async () => {
+  it('moves existing service points to a newly selected default schema version', async () => {
     const { agent } = makeAgent()
     const service = serviceFor(agent)
     const oldPoint = await registeredPoint(service)
@@ -365,8 +365,8 @@ describe('VerificationService', () => {
           anoncreds: expect.objectContaining({
             requested_attributes: {
               student_details: {
-                names: ['studentNumber', 'faculty', 'year'],
-                restrictions: [{ cred_def_id: 'cred-def-001' }],
+                names: ['studentNumber', 'faculty', 'year', 'programme'],
+                restrictions: [{ cred_def_id: 'cred-def-002' }],
               },
             },
           }),

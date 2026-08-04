@@ -73,6 +73,9 @@ export class VerificationStore {
   ): Promise<TrustedCredentialDefinitionRecord> {
     return this.withLock(async () => {
       const state = await this.readState()
+      const previousDefaultCredentialDefinitionId = makeDefault
+        ? state.trustedCredentialDefinitions.find((item) => item.isDefault)?.credentialDefinitionId
+        : undefined
       if (makeDefault) {
         state.trustedCredentialDefinitions = state.trustedCredentialDefinitions.map((item) => ({
           ...item,
@@ -90,6 +93,22 @@ export class VerificationStore {
       }
       if (index >= 0) state.trustedCredentialDefinitions[index] = next
       else state.trustedCredentialDefinitions.push(next)
+
+      if (
+        makeDefault &&
+        previousDefaultCredentialDefinitionId &&
+        previousDefaultCredentialDefinitionId !== next.credentialDefinitionId
+      ) {
+        state.servicePoints = state.servicePoints.map((servicePoint) =>
+          servicePoint.credentialDefinitionId === previousDefaultCredentialDefinitionId
+            ? {
+                ...servicePoint,
+                credentialDefinitionId: next.credentialDefinitionId,
+                updatedAt: next.updatedAt,
+              }
+            : servicePoint,
+        )
+      }
 
       await this.writeState(state)
       return next
