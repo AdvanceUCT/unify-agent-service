@@ -5,6 +5,7 @@ import { config } from '../config'
 
 import { apiKeyAuth } from './middleware/apiKeyAuth'
 import { errorHandler } from './middleware/errorHandler'
+import { requestContext } from './middleware/requestContext'
 import { requestLogger } from './middleware/requestLogger'
 import { buildApiRouter } from './routes'
 
@@ -13,6 +14,7 @@ export function createApiServer(agent: UniversityAgent): Express {
 
   // Caddy is the only production proxy in front of this service.
   app.set('trust proxy', 1)
+  app.use(requestContext)
   app.use(express.json())
   app.use(requestLogger)
 

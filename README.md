@@ -187,12 +187,14 @@ DIDComm URL when testing with a real phone.
 
 ## AnonCreds Verification API
 
-The same Credo agent can act as the verifier for static service-point QR codes.
-Configure a separate Vendor Portal key and the credential definitions that the
-verifier is allowed to trust:
+The same Credo agent can act as the verifier for static service-point QR codes
+and checkout-bound verification. Configure the shared Admin Portal agent key,
+the result-token secret, and the credential definitions that the verifier may
+trust:
 
 ```env
-VERIFIER_API_KEY=replace-with-a-separate-vendor-secret
+AGENT_API_KEY=replace-with-a-strong-server-to-server-secret
+VERIFICATION_RESULT_TOKEN_SECRET=replace-with-a-separate-random-secret
 VERIFIER_TRUSTED_CREDENTIAL_DEFINITION_IDS=did:indy:bcovrin:test:.../CLAIM_DEF/...
 VERIFICATION_PUBLIC_BASE_URL=https://voskuils.com
 ```
@@ -202,6 +204,15 @@ The returned `verificationUrl` is stable and can be printed as a permanent QR.
 Each wallet scan calls `POST /api/wallet/verification/sessions`, which creates a
 fresh five-minute Credo proof request rather than reusing proof material from the
 QR. Vendor servers read the live result through the protected verifier endpoints.
+
+For checkout verification, the Admin Portal calls
+`POST /api/verifier/checkout-sessions` with the vendor, service point, and
+checkout ID. The returned URL contains a short-lived, single-use claim
+capability. The wallet claims it through
+`POST /api/wallet/verification/sessions/:id/claim`; only then does the agent
+create the Credo proof request. Reused, expired, malformed, or mismatched claims
+are rejected. Vendor systems integrate with the Admin Portal's vendor API and
+never receive the agent key or wallet result capability.
 
 The verifier requests `studentNumber`, `faculty`, and `year`, matching the
 existing `StudentIdentity` credential schema. A proof is approved only when

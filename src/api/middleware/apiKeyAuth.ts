@@ -14,12 +14,9 @@ function isPublicPath(path: string): boolean {
 function isPublicWalletVerificationPath(path: string, method: string): boolean {
   return (
     (method === 'POST' && path === '/wallet/verification/sessions') ||
+    (method === 'POST' && /^\/wallet\/verification\/sessions\/[^/]+\/claim$/.test(path)) ||
     (method === 'GET' && /^\/wallet\/verification\/sessions\/[^/]+$/.test(path))
   )
-}
-
-function isVerifierReadPath(path: string, method: string): boolean {
-  return method === 'GET' && path.startsWith('/verifier/')
 }
 
 function extractBearerToken(header: string | undefined): string | null {
@@ -49,11 +46,7 @@ export const apiKeyAuth: RequestHandler = (req, res, next) => {
 
   const token = extractBearerToken(req.header('authorization'))
   const hasAgentAccess = token ? safeEqual(token, config.api.key) : false
-  const hasVerifierReadAccess = token
-    ? safeEqual(token, config.verifier.apiKey) && isVerifierReadPath(req.path, req.method)
-    : false
-
-  if (!hasAgentAccess && !hasVerifierReadAccess) {
+  if (!hasAgentAccess) {
     // Keep the response vague so callers cannot tell which part was wrong.
     res.status(401).json({ error: { message: 'Missing or invalid API key.' } })
     return

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -72,6 +73,9 @@ export class VerificationStore {
   ): Promise<TrustedCredentialDefinitionRecord> {
     return this.withLock(async () => {
       const state = await this.readState()
+      const previousDefaultCredentialDefinitionId = makeDefault
+        ? state.trustedCredentialDefinitions.find((item) => item.isDefault)?.credentialDefinitionId
+        : undefined
       if (makeDefault) {
         state.trustedCredentialDefinitions = state.trustedCredentialDefinitions.map((item) => ({
           ...item,
@@ -89,6 +93,22 @@ export class VerificationStore {
       }
       if (index >= 0) state.trustedCredentialDefinitions[index] = next
       else state.trustedCredentialDefinitions.push(next)
+
+      if (
+        makeDefault &&
+        previousDefaultCredentialDefinitionId &&
+        previousDefaultCredentialDefinitionId !== next.credentialDefinitionId
+      ) {
+        state.servicePoints = state.servicePoints.map((servicePoint) =>
+          servicePoint.credentialDefinitionId === previousDefaultCredentialDefinitionId
+            ? {
+                ...servicePoint,
+                credentialDefinitionId: next.credentialDefinitionId,
+                updatedAt: next.updatedAt,
+              }
+            : servicePoint,
+        )
+      }
 
       await this.writeState(state)
       return next
@@ -146,6 +166,42 @@ export class VerificationStore {
     return this.withLock(async () =>
       (await this.readState()).sessions.find((item) => item.proofRecordId === proofRecordId),
     )
+  }
+
+  async findSessionByCheckout(
+    vendorServicePointIds: string[],
+    checkoutId: string,
+  ): Promise<VerificationSessionRecord | undefined> {
+    return this.withLock(async () =>
+      (await this.readState()).sessions.find(
+        (item) => vendorServicePointIds.includes(item.servicePointId) && item.checkoutId === checkoutId,
+      ),
+    )
+  }
+
+  async claimSession(
+    id: string,
+    claimNonceHash: string,
+    claimedAt: string,
+  ): Promise<{ outcome: 'CLAIMED' | 'INVALID' | 'NOT_FOUND' | 'REUSED'; session?: VerificationSessionRecord }> {
+    return this.withLock(async () => {
+      const state = await this.readState()
+      const index = state.sessions.findIndex((item) => item.verificationRequestId === id)
+      if (index < 0) return { outcome: 'NOT_FOUND' }
+
+      const current = state.sessions[index]
+      const expected = Buffer.from(current.claimNonceHash ?? '')
+      const actual = Buffer.from(claimNonceHash)
+      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+        return { outcome: 'INVALID' }
+      }
+      if (current.claimedAt) return { outcome: 'REUSED', session: current }
+
+      const next = { ...current, claimedAt, updatedAt: claimedAt, state: 'claiming' }
+      state.sessions[index] = next
+      await this.writeState(state)
+      return { outcome: 'CLAIMED', session: next }
+    })
   }
 
   async findSessionByClientRequest(
