@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Creates and initializes the university Credo agent, including its wallet,
+ * mediator connection, ledger modules, and shutdown hooks.
+ * @module agent/agent
+ */
+
 import {
   Agent,
   ConsoleLogger,
@@ -12,6 +18,7 @@ import { config } from '../config'
 import { buildAgentModules } from './modules'
 import type { UniversityAgent } from './types'
 
+/** Initializes the configured agent and waits until its wallet and transports are ready. */
 export async function createAgent(): Promise<UniversityAgent> {
   const initConfig: InitConfig = {
     label: config.agent.label,

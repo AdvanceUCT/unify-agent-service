@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Coordinates issuer DID, schema, credential definition, and revocation setup.
+ * @module services/issuanceSetupService
+ */
+
 import type { UniversityAgent } from '../agent'
 import { AppError } from '../errors'
 
@@ -27,6 +32,7 @@ export type IssuanceSetupResult = {
   revocationStatusListTimestamp?: number
 }
 
+/** Runs the ordered, repeatable setup required before credentials can be issued. */
 export class IssuanceSetupService {
   private readonly schemas: SchemaService
 

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reduces proof evidence and service-point policy into a stable verification decision.
+ * @module services/verificationDecision
+ */
+
 import type {
   RevealedVerificationAttributes,
   VerificationDecision,
@@ -51,6 +56,7 @@ function protocolFailureCode(errorMessage?: string): VerificationFailureCode {
   return revocationFailureFromError(errorMessage) ?? 'CREDO_PROTOCOL_ERROR'
 }
 
+/** Applies cryptographic, trust, attribute, expiry, and revocation checks in a fixed order. */
 export function evaluateVerification(input: VerificationDecisionInput): VerificationDecisionResult {
   if (input.expired) {
     return { decision: 'Expired', failureCode: 'PROOF_REQUEST_EXPIRED' }

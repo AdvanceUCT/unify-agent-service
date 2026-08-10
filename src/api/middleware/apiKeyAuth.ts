@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Authenticates server-to-server API requests with the configured agent key.
+ * @module api/middleware/apiKeyAuth
+ */
+
 import { timingSafeEqual } from 'node:crypto'
 import type { RequestHandler } from 'express'
 
@@ -37,6 +42,7 @@ function safeEqual(left: string, right: string): boolean {
   return timingSafeEqual(leftBuffer, rightBuffer)
 }
 
+/** Rejects requests whose bearer key does not match the configured agent API key. */
 export const apiKeyAuth: RequestHandler = (req, res, next) => {
   // Health checks and student activation resolve cannot depend on the Admin Portal key.
   if (isPublicPath(req.path) || isPublicWalletVerificationPath(req.path, req.method)) {

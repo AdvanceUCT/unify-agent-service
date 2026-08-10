@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Orchestrates issuance setup and real student credential-offer requests.
+ * @module api/routes/issuance
+ */
+
 import { Router } from 'express'
 
 import type { UniversityAgent } from '../../agent'
@@ -11,6 +16,7 @@ import {
   requireStringArray,
 } from '../validation'
 
+/** Builds setup and batch-capable issuance orchestration routes. */
 export function buildIssuanceRouter(agent: UniversityAgent): Router {
   const router = Router()
   const issuance = new IssuanceSetupService(agent)

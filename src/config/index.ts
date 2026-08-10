@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reads, validates, and normalizes the agent's environment configuration.
+ * @module config
+ */
+
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 

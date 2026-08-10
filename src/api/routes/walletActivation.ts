@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Resolves single-use wallet activation capabilities into credential invitations.
+ * @module api/routes/walletActivation
+ */
+
 import { Router } from 'express'
 
 import type { UniversityAgent } from '../../agent'
@@ -5,6 +10,7 @@ import { WalletActivationService } from '../../services/walletActivationService'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireObject } from '../validation'
 
+/** Builds the public, capability-protected wallet activation route. */
 export function buildWalletActivationRouter(agent: UniversityAgent): Router {
   const router = Router()
   const activations = new WalletActivationService(agent)

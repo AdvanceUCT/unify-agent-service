@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Defines operational errors that may be returned safely through the HTTP layer.
+ * @module errors
+ */
+
+/** An expected service failure with an HTTP status and optional safe details. */
 export class AppError extends Error {
   readonly status: number
   readonly details?: unknown

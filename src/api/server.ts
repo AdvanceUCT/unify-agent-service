@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Builds the Express application and fixes middleware order for request context,
+ * logging, authentication, routing, and terminal error handling.
+ * @module api/server
+ */
+
 import express, { type Express } from 'express'
 
 import type { UniversityAgent } from '../agent'
@@ -9,6 +15,7 @@ import { requestContext } from './middleware/requestContext'
 import { requestLogger } from './middleware/requestLogger'
 import { buildApiRouter } from './routes'
 
+/** Creates the configured Express application without starting a network listener. */
 export function createApiServer(agent: UniversityAgent): Express {
   const app = express()
 

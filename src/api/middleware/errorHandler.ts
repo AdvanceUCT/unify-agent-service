@@ -1,6 +1,13 @@
+/**
+ * @fileoverview Converts expected application and Credo failures into stable HTTP responses
+ * without exposing internal error details to API clients.
+ * @module api/middleware/errorHandler
+ */
+
 import { CredoError } from '@credo-ts/core'
 import type { ErrorRequestHandler } from 'express'
 
+/** Sends the public form of an application error and keeps internal diagnostics server-side. */
 export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const requestId = String(res.locals.requestId ?? 'unknown')
   // Credo errors are usually protocol problems the Admin Portal can show clearly.

@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Persists service points, trusted definitions, and verification sessions in the
+ * agent data volume with serialized, atomic updates.
+ * @module services/verificationStore
+ */
+
 import { timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -23,7 +29,13 @@ const EMPTY_STORE: VerificationStoreFile = {
   trustedCredentialDefinitions: [],
 }
 
+/**
+ * Small file-backed persistence for the verifier PoC. The configured file lives in the
+ * agent data volume, alongside the encrypted Credo wallet, rather than in PostgreSQL.
+ */
 export class VerificationStore {
+  // Every read-modify-write operation shares one queue so concurrent requests cannot
+  // overwrite each other's service points, policies, or session transitions.
   private operationQueue: Promise<void> = Promise.resolve()
 
   constructor(private readonly filePath = config.verifier.storeFile) {}
@@ -94,6 +106,8 @@ export class VerificationStore {
       if (index >= 0) state.trustedCredentialDefinitions[index] = next
       else state.trustedCredentialDefinitions.push(next)
 
+      // Moving the default also moves service points that inherited the previous default;
+      // explicitly pinned service points keep their own credential definition.
       if (
         makeDefault &&
         previousDefaultCredentialDefinitionId &&
@@ -190,6 +204,8 @@ export class VerificationStore {
       if (index < 0) return { outcome: 'NOT_FOUND' }
 
       const current = state.sessions[index]
+      // Compare hashes in constant time after checking lengths so capability validation does
+      // not reveal useful prefix information through response timing.
       const expected = Buffer.from(current.claimNonceHash ?? '')
       const actual = Buffer.from(claimNonceHash)
       if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
@@ -247,6 +263,7 @@ export class VerificationStore {
 
   private async withLock<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.operationQueue.then(operation, operation)
+    // A failed operation must not poison the queue; later requests still need a chance to run.
     this.operationQueue = result.then(
       () => undefined,
       () => undefined,
@@ -260,6 +277,8 @@ export class VerificationStore {
     try {
       raw = await readFile(this.filePath, 'utf8')
     } catch (error) {
+      // A missing file means a first boot. Malformed existing data is treated as corruption
+      // instead of silently resetting verification history.
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return { servicePoints: [], sessions: [], trustedCredentialDefinitions: [] }
       }
@@ -290,6 +309,8 @@ export class VerificationStore {
 
   private async writeState(state: VerificationStoreFile): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true })
+    // Replace the complete JSON document atomically so a crash cannot leave a partially
+    // written store at the configured path.
     const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`
     await writeFile(tempPath, JSON.stringify(state, null, 2))
     await rename(tempPath, this.filePath)
@@ -298,6 +319,7 @@ export class VerificationStore {
 
 let defaultStore: VerificationStore | undefined
 
+/** Returns the process-wide verification store configured for the agent data volume. */
 export function getVerificationStore(): VerificationStore {
   defaultStore ??= new VerificationStore()
   return defaultStore

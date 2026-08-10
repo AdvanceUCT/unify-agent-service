@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates and resolves the issuer DID used to publish university trust material.
+ * @module services/didService
+ */
+
 import { randomBytes } from 'crypto'
 
 import { Hasher, KeyType, TypedArrayEncoder } from '@credo-ts/core'
@@ -5,6 +10,7 @@ import { Hasher, KeyType, TypedArrayEncoder } from '@credo-ts/core'
 import type { UniversityAgent } from '../agent'
 import { AppError } from '../errors'
 
+/** Manages the issuer DID and its public ledger registration. */
 export class DidService {
   constructor(private readonly agent: UniversityAgent) {}
 

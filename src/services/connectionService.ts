@@ -1,6 +1,12 @@
+/**
+ * @fileoverview Provides connection queries and invitation creation on top of the Credo agent.
+ * @module services/connectionService
+ */
+
 import type { UniversityAgent } from '../agent'
 import { config } from '../config'
 
+/** Exposes the limited connection operations required by administrator workflows. */
 export class ConnectionService {
   constructor(private readonly agent: UniversityAgent) {}
 

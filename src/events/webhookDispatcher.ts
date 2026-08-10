@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Signs and delivers agent events to the portal with bounded retry behavior.
+ * @module events/webhookDispatcher
+ */
+
 import { createHmac, randomUUID } from 'node:crypto'
 
 import { config } from '../config'
@@ -79,6 +84,7 @@ function signatureFor(payload: string, signingSecret: string) {
   return `sha256=${createHmac('sha256', signingSecret).update(payload).digest('hex')}`
 }
 
+/** Delivers a signed webhook and retries only failures considered transient. */
 export async function dispatchWebhook(
   payload: WebhookPayload,
   options: WebhookDispatchOptions = {},

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines the storage, API, and event shapes shared by verifier components.
+ * @module services/verificationTypes
+ */
+
 export type VerificationDecision = 'Pending' | 'Approved' | 'Declined' | 'Expired' | 'Failed'
 
 export type VerificationFailureCode =

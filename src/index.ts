@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Boots the Credo agent and HTTP server, then coordinates graceful shutdown.
+ * @module index
+ */
+
 import 'reflect-metadata'
 
 import { createAgent } from './agent'

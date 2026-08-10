@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides issuer DID creation and lookup endpoints used during university setup.
+ * @module api/routes/dids
+ */
+
 import { Router } from 'express'
 
 import { DidService } from '../../services/didService'
@@ -6,6 +11,7 @@ import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireObject } from '../validation'
 
+/** Builds issuer DID management routes for university setup. */
 export function buildDidsRouter(agent: UniversityAgent): Router {
   const router = Router()
   const dids = new DidService(agent)

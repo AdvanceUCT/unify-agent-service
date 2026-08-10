@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Synchronizes Credo credential exchange changes with lifecycle state and webhooks.
+ * @module events/credentialEvents
+ */
+
 import {
   CredentialEventTypes,
   type CredentialStateChangedEvent,
@@ -10,6 +15,7 @@ import { dispatchWebhook } from './webhookDispatcher'
 
 type CredentialWebhookDispatcher = typeof dispatchWebhook
 
+/** Subscribes to credential exchange changes and emits normalized lifecycle events. */
 export function registerCredentialEventHandlers(
   agent: UniversityAgent,
   webhookDispatcher: CredentialWebhookDispatcher = dispatchWebhook,

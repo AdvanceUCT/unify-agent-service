@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Contains strict request-body parsers shared by the Express route modules.
+ * @module api/validation
+ */
+
 import { AppError } from '../errors'
 
 export type CredentialAttributeInput = { name: string; value: string }
