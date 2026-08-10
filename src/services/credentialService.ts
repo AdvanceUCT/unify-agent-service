@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates credential offers and exposes issuer-side exchange state to the API.
+ * @module services/credentialService
+ */
+
 import type { UniversityAgent } from '../agent'
 import { config } from '../config'
 import { AppError } from '../errors'
@@ -29,6 +34,7 @@ function withRevocationRegistryDefinitionId<T extends object>(
   return input as T & { revocationRegistryDefinitionId?: string }
 }
 
+/** Owns issuer-side offer creation and credential exchange queries. */
 export class CredentialService {
   constructor(
     private readonly agent: UniversityAgent,

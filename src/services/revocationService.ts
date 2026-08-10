@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Applies credential suspension, reactivation, and revocation to the ledger-backed
+ * status list, local lifecycle store, and portal webhook stream.
+ * @module services/revocationService
+ */
+
 import { randomUUID } from 'node:crypto'
 
 import type { UniversityAgent } from '../agent'

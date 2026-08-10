@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Stores and retrieves AnonCreds revocation tails files from the agent's
+ * persistent filesystem rather than a transient container path.
+ * @module agent/tailsFileService
+ */
+
 import { BasicTailsFileService, type AnonCredsRevocationRegistryDefinition } from '@credo-ts/anoncreds'
 import { CredoError, InjectionSymbols, type AgentContext, type FileSystem } from '@credo-ts/core'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +20,7 @@ function localPathFromTailsLocation(tailsLocation: string | undefined): string |
   return fileURLToPath(tailsLocation)
 }
 
+/** Resolves tails artifacts beneath the configured persistent tails directory. */
 export class LocalTailsFileService extends BasicTailsFileService {
   private readonly localTailsDirectoryPath: string
   private readonly tailsBaseUrl: string

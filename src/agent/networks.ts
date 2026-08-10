@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines the Indy network configuration and loads local genesis data.
+ * @module agent/networks
+ */
+
 import { readFileSync } from 'fs'
 import { join } from 'path'
 

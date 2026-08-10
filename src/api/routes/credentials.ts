@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Defines credential-offer, acceptance-status, and activation-link endpoints.
+ * @module api/routes/credentials
+ */
+
 import { Router } from 'express'
 
 import { ActivationLinkService } from '../../services/activationLinkService'
@@ -19,6 +24,7 @@ function withRevocationRegistryDefinitionId<T extends object>(
   return input as T & { revocationRegistryDefinitionId?: string }
 }
 
+/** Builds issuer credential routes, including activation-link delivery for wallet pickup. */
 export function buildCredentialsRouter(agent: UniversityAgent): Router {
   const router = Router()
   const activationLinks = new ActivationLinkService(agent)

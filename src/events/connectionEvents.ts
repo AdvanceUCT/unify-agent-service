@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Observes Credo connection state changes and forwards relevant events to the portal.
+ * @module events/connectionEvents
+ */
+
 import {
   ConnectionEventTypes,
   type ConnectionStateChangedEvent,
@@ -7,6 +12,7 @@ import type { UniversityAgent } from '../agent'
 
 import { dispatchWebhook } from './webhookDispatcher'
 
+/** Subscribes once to connection changes that the portal needs to observe. */
 export function registerConnectionEventHandlers(agent: UniversityAgent): void {
   agent.events.on<ConnectionStateChangedEvent>(
     ConnectionEventTypes.ConnectionStateChanged,

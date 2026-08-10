@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Enforces bounded in-memory request rates for public verification entry points.
+ * @module services/verificationRateLimiter
+ */
+
 import { AppError } from '../errors'
 
 type RateLimitOptions = {
@@ -6,6 +11,7 @@ type RateLimitOptions = {
   windowMs?: number
 }
 
+/** Tracks request windows by caller key and rejects callers that exceed the configured limit. */
 export class VerificationRateLimiter {
   private readonly ipAttempts = new Map<string, number[]>()
   private readonly servicePointAttempts = new Map<string, number[]>()

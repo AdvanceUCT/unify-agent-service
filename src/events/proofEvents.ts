@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Feeds Credo proof state changes into the verifier's authoritative session state.
+ * @module events/proofEvents
+ */
+
 import { ProofEventTypes, type ProofStateChangedEvent } from '@credo-ts/core'
 
 import type { UniversityAgent } from '../agent'
@@ -8,6 +13,7 @@ import { dispatchWebhook } from './webhookDispatcher'
 type ProofEventVerifier = Pick<VerificationService, 'handleProofStateChanged'>
 type ProofWebhookDispatcher = typeof dispatchWebhook
 
+/** Subscribes to proof changes and synchronizes matching verification sessions. */
 export function registerProofEventHandlers(
   agent: UniversityAgent,
   verifier: ProofEventVerifier = new VerificationService(agent),

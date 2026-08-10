@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Registers and resolves AnonCreds schemas, credential definitions, and revocation registries.
+ * @module services/schemaService
+ */
+
 import type { UniversityAgent } from '../agent'
 import { AppError } from '../errors'
 
@@ -18,6 +23,7 @@ function assertFinished(operation: string, state: RegistrationState): void {
   throw new AppError(422, `${operation} did not finish synchronously.`)
 }
 
+/** Publishes and resolves the ledger objects that define university credentials. */
 export class SchemaService {
   constructor(private readonly agent: UniversityAgent) {}
 

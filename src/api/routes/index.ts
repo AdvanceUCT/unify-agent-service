@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Mounts the authenticated API routers under their public route prefixes.
+ * @module api/routes
+ */
+
 import { Router } from 'express'
 
 import type { UniversityAgent } from '../../agent'
@@ -13,6 +18,7 @@ import { buildVerifierRouter } from './verifier'
 import { buildWalletActivationRouter } from './walletActivation'
 import { buildWalletVerificationRouter } from './walletVerification'
 
+/** Composes the versioned service API from its domain routers. */
 export function buildApiRouter(agent: UniversityAgent): Router {
   const router = Router()
 

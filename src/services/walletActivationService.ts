@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Validates wallet activation capabilities and releases their credential invitations once.
+ * @module services/walletActivationService
+ */
+
 import type { UniversityAgent } from '../agent'
 import { AppError } from '../errors'
 
@@ -18,6 +23,7 @@ function isExpired(expiresAt: string, now = new Date()) {
   return new Date(expiresAt).getTime() <= now.getTime()
 }
 
+/** Resolves and atomically consumes wallet activation records. */
 export class WalletActivationService {
   constructor(
     _agent: UniversityAgent,

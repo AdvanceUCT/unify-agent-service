@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Exposes connection listing and inspection endpoints for administrator workflows.
+ * @module api/routes/connections
+ */
+
 import { Router } from 'express'
 
 import { ConnectionService } from '../../services/connectionService'
@@ -5,6 +10,7 @@ import type { UniversityAgent } from '../../agent'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireObject } from '../validation'
 
+/** Builds the authenticated routes used to inspect and create DIDComm connections. */
 export function buildConnectionsRouter(agent: UniversityAgent): Router {
   const router = Router()
   const connections = new ConnectionService(agent)

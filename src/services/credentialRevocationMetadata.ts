@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Extracts and validates the revocation identifiers attached to Credo credentials.
+ * @module services/credentialRevocationMetadata
+ */
+
 import {
   AnonCredsCredentialMetadataKey,
   AnonCredsCredentialRepository,
@@ -12,6 +17,7 @@ export type CredentialRevocationMetadata = {
   revocationRegistryDefinitionId: string
 }
 
+/** Returns revocation metadata when the credential record carries a complete binding. */
 export async function findCredentialRevocationMetadata(
   agent: UniversityAgent,
   credentialRecord: CredentialExchangeRecord,
@@ -39,6 +45,7 @@ export async function findCredentialRevocationMetadata(
   return { credentialRevocationId, revocationRegistryDefinitionId }
 }
 
+/** Returns complete revocation metadata or fails when the credential cannot be managed safely. */
 export async function requireCredentialRevocationMetadata(
   agent: UniversityAgent,
   credentialExchangeId: string,

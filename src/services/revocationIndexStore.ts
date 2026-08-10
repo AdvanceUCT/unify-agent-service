@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Allocates revocation registry indexes without reusing an index across credentials.
+ * @module services/revocationIndexStore
+ */
+
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -8,6 +13,7 @@ type RevocationIndexStoreFile = {
   nextIndexByRegistry: Record<string, number>
 }
 
+/** Reserves monotonically increasing indexes for each revocation registry. */
 export class RevocationIndexStore {
   private operationQueue: Promise<void> = Promise.resolve()
 

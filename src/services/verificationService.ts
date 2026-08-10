@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Orchestrates verifier sessions from service-point lookup through Credo proof
+ * exchange, policy evaluation, result capability checks, and cleanup.
+ * @module services/verificationService
+ */
+
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import type { ProofExchangeRecord } from '@credo-ts/core'

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Shared TypeScript aliases for the configured university Credo agent.
+ * @module agent/types
+ */
+
 import type { Agent } from '@credo-ts/core'
 
 import type { AgentModules } from './modules'

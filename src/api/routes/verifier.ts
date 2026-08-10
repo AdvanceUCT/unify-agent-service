@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Defines administrator and vendor endpoints for service points, trust policy,
+ * proof sessions, checkout claims, and verification results.
+ * @module api/routes/verifier
+ */
+
 import { Router } from 'express'
 
 import type { UniversityAgent } from '../../agent'
@@ -20,6 +26,7 @@ type VerifierRouteService = Pick<
   | 'updateServicePoint'
 >
 
+/** Builds the privileged verifier-management and vendor result routes. */
 export function buildVerifierRouter(
   agent: UniversityAgent,
   verifier: VerifierRouteService = new VerificationService(agent),

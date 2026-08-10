@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Registers and resolves AnonCreds schemas and credential definitions.
+ * @module api/routes/schemas
+ */
+
 import { Router } from 'express'
 
 import { SchemaService } from '../../services/schemaService'
@@ -11,6 +16,7 @@ import {
   requireStringArray,
 } from '../validation'
 
+/** Builds routes for creating and resolving public AnonCreds trust material. */
 export function buildSchemasRouter(agent: UniversityAgent): Router {
   const router = Router()
   const schemas = new SchemaService(agent)

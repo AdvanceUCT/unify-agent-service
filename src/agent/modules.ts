@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Assembles the Credo modules used for DIDComm, AnonCreds issuance,
+ * proof presentation, mediation, and revocation.
+ * @module agent/modules
+ */
+
 import {
   AutoAcceptCredential,
   AutoAcceptProof,
@@ -32,6 +38,7 @@ import { config } from '../config'
 import { indyNetworks } from './networks'
 import { LocalTailsFileService } from './tailsFileService'
 
+/** Creates the module set passed to the Credo `Agent` constructor. */
 export function buildAgentModules() {
   const legacyIndyCredentialFormatService = new LegacyIndyCredentialFormatService()
   const legacyIndyProofFormatService = new LegacyIndyProofFormatService()

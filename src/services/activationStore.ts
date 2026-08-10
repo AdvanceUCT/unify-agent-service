@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Persists hashed, expiring, single-use wallet activation capabilities.
+ * @module services/activationStore
+ */
+
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -21,18 +26,22 @@ type ActivationStoreFile = {
   activations: StoredActivationRecord[]
 }
 
+/** Generates the bearer secret placed in a wallet activation link. */
 export function generateActivationToken(): string {
   return randomBytes(32).toString('base64url')
 }
 
+/** Generates the public identifier used to locate an activation record. */
 export function generateActivationId(): string {
   return `activation-${randomBytes(12).toString('hex')}`
 }
 
+/** Derives the value stored server-side instead of retaining the bearer token. */
 export function hashActivationToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
+/** Serializes activation-record reads and writes against one JSON document. */
 export class ActivationStore {
   constructor(private readonly filePath = config.activations.storeFile) {}
 

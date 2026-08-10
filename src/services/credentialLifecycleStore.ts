@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Stores the agent's materialized suspension and revocation lifecycle records.
+ * @module services/credentialLifecycleStore
+ */
+
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -23,6 +28,7 @@ type CredentialLifecycleStoreFile = {
   credentials: CredentialLifecycleRecord[]
 }
 
+/** Maintains replay-safe local lifecycle state keyed by credential exchange. */
 export class CredentialLifecycleStore {
   private operationQueue: Promise<void> = Promise.resolve()
 

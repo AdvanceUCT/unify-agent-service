@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Provides the wallet-facing verification session, claim, and result endpoints.
+ * @module api/routes/walletVerification
+ */
+
 import { Router } from 'express'
 
 import type { UniversityAgent } from '../../agent'
@@ -16,6 +21,7 @@ function bearerToken(header: string | undefined): string | undefined {
   return scheme?.toLowerCase() === 'bearer' && token && !extra ? token : undefined
 }
 
+/** Builds wallet-facing proof-session routes without exposing vendor administration APIs. */
 export function buildWalletVerificationRouter(
   agent: UniversityAgent,
   verifier: WalletVerificationRouteService = new VerificationService(agent),

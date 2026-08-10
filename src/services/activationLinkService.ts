@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Creates activation records for credential offers and builds the student-facing link.
+ * @module services/activationLinkService
+ */
+
 import { URLSearchParams } from 'node:url'
 
 import type { UniversityAgent } from '../agent'
@@ -76,6 +81,7 @@ function withRevocationRegistryDefinitionId<T extends object>(
   return input as T & { revocationRegistryDefinitionId?: string }
 }
 
+/** Couples a credential offer to an expiring activation capability for the wallet. */
 export class ActivationLinkService {
   private readonly credentials: CredentialService
 

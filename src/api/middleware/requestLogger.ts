@@ -1,5 +1,11 @@
+/**
+ * @fileoverview Emits one structured completion log per HTTP request using its correlation ID.
+ * @module api/middleware/requestLogger
+ */
+
 import type { RequestHandler } from 'express'
 
+/** Records method, path, status, duration, and correlation ID after a response finishes. */
 export const requestLogger: RequestHandler = (req, res, next) => {
   const start = process.hrtime.bigint()
 

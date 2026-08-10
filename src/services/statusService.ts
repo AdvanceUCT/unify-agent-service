@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Collects readiness details from the Credo wallet, mediator, and configured ledgers.
+ * @module services/statusService
+ */
+
 import type { UniversityAgent } from '../agent'
 import { indyNetworks } from '../agent/networks'
 
@@ -14,6 +19,7 @@ export interface AgentStatus {
   timestamp: string
 }
 
+/** Produces the health snapshot returned by operational status endpoints. */
 export class StatusService {
   constructor(private readonly agent: UniversityAgent) {}
 

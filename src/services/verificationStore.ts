@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Persists service points, trusted definitions, and verification sessions in the
+ * agent data volume with serialized, atomic updates.
+ * @module services/verificationStore
+ */
+
 import { timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -313,6 +319,7 @@ export class VerificationStore {
 
 let defaultStore: VerificationStore | undefined
 
+/** Returns the process-wide verification store configured for the agent data volume. */
 export function getVerificationStore(): VerificationStore {
   defaultStore ??= new VerificationStore()
   return defaultStore
