@@ -86,6 +86,10 @@ function isTerminal(decision: VerificationDecision): boolean {
   return decision !== 'Pending'
 }
 
+/**
+ * Owns the verifier-side session lifecycle and converts Credo proof records
+ * into the small, policy-checked result shapes exposed to wallets and vendors.
+ */
 export class VerificationService {
   private readonly now: () => Date
   private readonly rateLimiter: VerificationRateLimiter
@@ -178,6 +182,7 @@ export class VerificationService {
     return this.withVerificationUrl(updated)
   }
 
+  /** Creates an unclaimed checkout capability without starting a Credo proof exchange yet. */
   async createCheckoutSession(input: {
     vendorId: string
     servicePointId: string
@@ -198,6 +203,8 @@ export class VerificationService {
         throw new AppError(410, 'Service point verification is disabled.', undefined, 'SERVICE_POINT_DISABLED')
       }
 
+      // A vendor retry for the same checkout must return the original capability instead of
+      // creating parallel proof requests that the wallet could claim independently.
       const existing = await this.store.findSessionByCheckout([servicePoint.id], input.checkoutId)
       if (existing) return this.checkoutResponse(existing)
 
@@ -223,6 +230,7 @@ export class VerificationService {
     })
   }
 
+  /** Consumes a single-use checkout capability and only then creates its proof invitation. */
   async claimCheckoutSession(input: {
     verificationRequestId: string
     claimToken: string
@@ -248,6 +256,8 @@ export class VerificationService {
       throw new AppError(410, 'Service point verification is disabled.', undefined, 'SERVICE_POINT_DISABLED')
     }
 
+    // Claiming is persisted before Credo work begins, so two wallet requests cannot both
+    // turn the same checkout link into usable proof exchanges.
     const claimed = await this.store.claimSession(
       input.verificationRequestId,
       this.claimTokenHash(input.claimToken),
@@ -290,6 +300,7 @@ export class VerificationService {
     }
   }
 
+  /** Starts a fresh proof exchange for a scan of a static public service-point code. */
   async startSession(input: {
     publicServicePointId: string
     clientRequestId: string
@@ -312,6 +323,8 @@ export class VerificationService {
         throw new AppError(410, 'Service point verification is disabled.', undefined, 'SERVICE_POINT_DISABLED')
       }
 
+      // The wallet keeps this request id stable across network retries so a repeated scan frame
+      // cannot create multiple live sessions for one user action.
       const existing = await this.store.findSessionByClientRequest(servicePoint.id, input.clientRequestId)
       if (existing) {
         if (this.now().getTime() >= new Date(existing.expiresAt).getTime()) {
@@ -325,6 +338,7 @@ export class VerificationService {
         return this.startResponse(existing, servicePoint)
       }
 
+      // Bound unfinished work per service point before asking Credo to allocate another exchange.
       const pendingSessions = (await this.store.listSessionsByServicePoint(servicePoint.id)).filter(
         (session) => session.decision === 'Pending' && this.now().getTime() < new Date(session.expiresAt).getTime(),
       )
@@ -380,6 +394,7 @@ export class VerificationService {
     })
   }
 
+  /** Returns the capability-protected minimal result used by the presenting wallet. */
   async getWalletResult(
     verificationRequestId: string,
     resultToken: string | undefined,
@@ -459,12 +474,14 @@ export class VerificationService {
       .slice(0, 50)
   }
 
+  /** Re-evaluates a stored session whenever Credo advances the associated proof exchange. */
   async handleProofStateChanged(proofRecord: ProofExchangeRecord): Promise<VerificationStatusResult | undefined> {
     const session = await this.store.findSessionByProofRecordId(proofRecord.id)
     if (!session) return undefined
     return this.syncSession(session, proofRecord)
   }
 
+  /** Deletes completed Credo records after their short result-visibility window closes. */
   async runCleanup(): Promise<void> {
     const sessions = await this.store.listSessions()
 
@@ -498,6 +515,8 @@ export class VerificationService {
     }
   }
 
+  // Credo's cryptographic result is necessary but not sufficient: this method also enforces
+  // expiry, the service-point policy, trusted credential definitions, and requested fields.
   private async syncSession(
     session: VerificationSessionRecord,
     providedProofRecord?: ProofExchangeRecord,
@@ -699,6 +718,8 @@ export class VerificationService {
   private async ensureConfiguredPolicies(): Promise<TrustedCredentialDefinitionRecord[]> {
     let records = await this.store.listTrustedCredentialDefinitions()
 
+    // Environment configuration only bootstraps an empty store. Once persisted policies
+    // exist, operators manage them through the authenticated verifier API.
     if (records.length === 0) {
       for (const credentialDefinitionId of this.trustedCredentialDefinitionIds) {
         const hasDefault = records.some((record) => record.active && record.isDefault)
@@ -768,6 +789,7 @@ export class VerificationService {
       const outOfBandRecord = await this.agent.oob.createInvitation({ messages: [message as never] })
       return { proofRecord, outOfBandRecord }
     } catch (error) {
+      // Do not retain a proof record that can never be delivered to a wallet.
       await this.agent.proofs.deleteById(proofRecord.id).catch(() => undefined)
       throw new AppError(
         422,
@@ -802,6 +824,7 @@ export class VerificationService {
     }
   }
 
+  /** Returns vendor-safe completion metadata without disclosed credential attributes. */
   async getResult(id: string): Promise<MinimalVerificationResult> {
     const status = await this.getStatus(id)
     return {
@@ -856,6 +879,10 @@ export class VerificationService {
     return policy
   }
 
+  /**
+   * Resolves a credential definition and schema from the ledger, rejects definitions
+   * without revocation support, and derives the allowed proof attributes from that schema.
+   */
   async registerTrustedCredentialDefinition(input: {
     credentialDefinitionId: string
     makeDefault?: boolean

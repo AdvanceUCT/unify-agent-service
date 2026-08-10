@@ -18,7 +18,13 @@ export type CredentialLifecycleResult = CredentialLifecycleRecord & {
   eventId?: string
 }
 
+/**
+ * Applies credential lifecycle transitions to the public revocation status list, then
+ * persists the resulting state and notifies the Admin Portal.
+ */
 export class RevocationService {
+  // Lifecycle requests are serialized because two updates to the same status list index
+  // must evaluate their transitions against a stable previous state.
   private operationQueue: Promise<void> = Promise.resolve()
 
   constructor(
@@ -74,6 +80,8 @@ export class RevocationService {
     this.assertTransition(operation, previousStatus, existing)
 
     let statusListTimestamp = existing?.statusListTimestamp
+    // Suspension already marks the index as revoked. Permanently revoking that suspended
+    // credential only changes the local lifecycle state; publishing the same index is redundant.
     if (!(operation === 'revoke' && previousStatus === 'SUSPENDED')) {
       statusListTimestamp = await this.publishStatusListUpdate({
         credentialRevocationId: metadata.credentialRevocationId,
@@ -98,6 +106,8 @@ export class RevocationService {
       updatedAt: timestamp,
     }
 
+    // The ledger update succeeds before local persistence, and local persistence succeeds
+    // before the webhook, so the portal is never told about an uncommitted lifecycle state.
     await this.store.save(record)
     const eventId = randomUUID()
     await this.webhookDispatcher({
