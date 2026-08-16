@@ -147,6 +147,7 @@ describe('VerificationService', () => {
       }),
     )
     expect(agent.oob.createInvitation).toHaveBeenCalledWith({
+      handshake: false,
       messages: [{ '@id': 'proof-request-message' }],
     })
   })
