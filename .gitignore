@@ -8,3 +8,5 @@ docs-local/
 .claude*
 .vscode*
 ngrok.yml
+output/pdf/unify-system-beginner-course.pdf
+tmp/pdfs

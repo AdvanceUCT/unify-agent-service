@@ -792,7 +792,13 @@ export class VerificationService {
     }
 
     try {
-      const outOfBandRecord = await this.agent.oob.createInvitation({ messages: [message as never] })
+      // The proof request is embedded in the invitation, so a separate DIDComm
+      // connection handshake only delays delivery and can leave mobile holders waiting
+      // indefinitely when a mediator or verifier briefly disconnects.
+      const outOfBandRecord = await this.agent.oob.createInvitation({
+        handshake: false,
+        messages: [message as never],
+      })
       return { proofRecord, outOfBandRecord }
     } catch (error) {
       // Do not retain a proof record that can never be delivered to a wallet.
