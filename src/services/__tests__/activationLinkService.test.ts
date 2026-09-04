@@ -96,4 +96,34 @@ describe('ActivationLinkService', () => {
       invitationUrl: 'https://issuer.example.test/oob?oob=encoded-invitation',
     })
   })
+
+  it('replays a keyed activation request without creating another offer', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'unify-activation-links-'))
+    tempDir = dir
+    const store = new ActivationStore(join(dir, 'activations.json'))
+    const agent = makeAgent()
+    const service = new ActivationLinkService(agent as never, store)
+    const request = {
+      credentialDefinitionId: 'cred-def-id',
+      students: [{
+        attributes: [{ name: 'studentNumber', value: 'VOSCAL100' }],
+        email: 'caleb.voskuil@gmail.com',
+        externalId: 'student-demo-100',
+        idempotencyKey: 'renewal-job-001',
+      }],
+    }
+
+    const [first, replay] = await Promise.all([
+      service.createBatchActivationLinks(request),
+      service.createBatchActivationLinks(request),
+    ])
+
+    expect(replay.offers[0]).toMatchObject({
+      activationId: first.offers[0].activationId,
+      activationUrl: first.offers[0].activationUrl,
+      credentialExchangeId: first.offers[0].credentialExchangeId,
+    })
+    expect(agent.credentials.createOffer).toHaveBeenCalledTimes(1)
+    expect(agent.oob.createInvitation).toHaveBeenCalledTimes(1)
+  })
 })

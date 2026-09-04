@@ -101,6 +101,10 @@ export const config = {
   },
   activations: {
     storeFile: requireEnv('ACTIVATION_STORE_FILE', join(homedir(), '.afj', 'activation-links.json')),
+    idempotencySecret: requireSecret(
+      'ACTIVATION_IDEMPOTENCY_SECRET',
+      'dev-activation-idempotency-secret',
+    ),
     // Student-facing link route used in the email sent by the Admin Portal.
     walletActivationRoute: requireEnv('WALLET_ACTIVATION_ROUTE', 'unifywallet://activate'),
     tokenTtlHours: parsePositiveInteger('ACTIVATION_TOKEN_TTL_HOURS', 24),
