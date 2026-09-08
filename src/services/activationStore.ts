@@ -17,7 +17,9 @@ export type StoredActivationRecord = {
   expiresAt: string
   invitationId: string
   invitationUrl: string
+  idempotencyKeyHash?: string
   issuerLabel: string
+  outOfBandId?: string
   tokenHash: string
   revocationRegistryDefinitionId?: string
 }
@@ -62,6 +64,11 @@ export class ActivationStore {
     const tokenHash = hashActivationToken(token)
     const activations = await this.readAll()
     return activations.find((activation) => activation.tokenHash === tokenHash)
+  }
+
+  async findByIdempotencyKeyHash(idempotencyKeyHash: string): Promise<StoredActivationRecord | undefined> {
+    const activations = await this.readAll()
+    return activations.find((activation) => activation.idempotencyKeyHash === idempotencyKeyHash)
   }
 
   async clear(): Promise<void> {

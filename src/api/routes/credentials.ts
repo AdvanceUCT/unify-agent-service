@@ -106,6 +106,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
         students: Array<{
           externalId?: string
           email?: string
+          idempotencyKey?: string
           attributes: Array<{ name: string; value: string }>
         }>
       } = {
@@ -115,6 +116,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
           return {
             externalId: optionalString(value, 'externalId'),
             email: optionalString(value, 'email'),
+            idempotencyKey: optionalString(value, 'idempotencyKey'),
             attributes: requireAttributes(value),
           }
         }),

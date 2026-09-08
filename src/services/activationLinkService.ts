@@ -3,6 +3,7 @@
  * @module services/activationLinkService
  */
 
+import { createHash, createHmac } from 'node:crypto'
 import { URLSearchParams } from 'node:url'
 
 import type { UniversityAgent } from '../agent'
@@ -21,6 +22,7 @@ type StudentActivationInput = {
   attributes: Array<{ name: string; value: string }>
   email?: string
   externalId?: string
+  idempotencyKey?: string
 }
 
 type CredentialOfferInput = Parameters<CredentialService['createOfferInvitation']>[0]
@@ -59,6 +61,14 @@ function activationUrlForToken(token: string): string {
   return `${config.activations.walletActivationRoute}?${new URLSearchParams({ token }).toString()}`
 }
 
+function idempotencyKeyHash(value: string) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function tokenForIdempotencyKey(value: string) {
+  return createHmac('sha256', config.activations.idempotencySecret).update(value).digest('base64url')
+}
+
 function expiresAtFrom(createdAt: Date): string {
   const expiresAt = new Date(createdAt)
   expiresAt.setHours(expiresAt.getHours() + config.activations.tokenTtlHours)
@@ -84,6 +94,7 @@ function withRevocationRegistryDefinitionId<T extends object>(
 /** Couples a credential offer to an expiring activation capability for the wallet. */
 export class ActivationLinkService {
   private readonly credentials: CredentialService
+  private operationQueue: Promise<void> = Promise.resolve()
 
   constructor(
     agent: UniversityAgent,
@@ -131,7 +142,45 @@ export class ActivationLinkService {
     revocationRegistryDefinitionId?: string
     student: StudentActivationInput
   }): Promise<BatchActivationLinkResult['offers'][number]> {
-    const token = generateActivationToken()
+    const operation = () => this.createActivationLinkUnlocked(params)
+    const result = this.operationQueue.then(operation, operation)
+    this.operationQueue = result.then(() => undefined, () => undefined)
+    return result
+  }
+
+  private async createActivationLinkUnlocked(params: {
+    credentialDefinitionId: string
+    revocationRegistryDefinitionId?: string
+    student: StudentActivationInput
+  }): Promise<BatchActivationLinkResult['offers'][number]> {
+    const keyHash = params.student.idempotencyKey
+      ? idempotencyKeyHash(params.student.idempotencyKey)
+      : undefined
+    const token = params.student.idempotencyKey
+      ? tokenForIdempotencyKey(params.student.idempotencyKey)
+      : generateActivationToken()
+    if (keyHash) {
+      const existing = await this.store.findByIdempotencyKeyHash(keyHash)
+      if (existing) {
+        const expiresAt = expiresAtFrom(new Date())
+        await this.store.save({ ...existing, expiresAt, tokenHash: hashActivationToken(token) })
+        return {
+          activationId: existing.activationId,
+          activationUrl: activationUrlForToken(token),
+          credentialExchangeId: existing.credentialExchangeId,
+          outOfBandId: existing.outOfBandId ?? existing.invitationId,
+          expiresAt,
+          ...(existing.credentialRevocationId
+            ? { credentialRevocationId: existing.credentialRevocationId }
+            : {}),
+          ...(existing.revocationRegistryDefinitionId
+            ? { revocationRegistryDefinitionId: existing.revocationRegistryDefinitionId }
+            : {}),
+          ...(params.student.email ? { email: params.student.email } : {}),
+          ...(params.student.externalId ? { externalId: params.student.externalId } : {}),
+        }
+      }
+    }
     const activationId = generateActivationId()
     const createdAt = new Date()
     const input: CredentialOfferInput = {
@@ -153,7 +202,9 @@ export class ActivationLinkService {
       expiresAt,
       invitationId,
       invitationUrl: offer.invitationUrl,
+      ...(keyHash ? { idempotencyKeyHash: keyHash } : {}),
       issuerLabel: config.activations.issuerLabel,
+      outOfBandId: offer.outOfBandId,
       tokenHash: hashActivationToken(token),
     }
     if (credentialRevocationId) {
