@@ -107,4 +107,111 @@ describe('CredentialService revocation allocation', () => {
     expect(error).toBeInstanceOf(AppError)
     expect((error as AppError).code).toBe('REVOCATION_REGISTRY_CREDENTIAL_DEFINITION_MISMATCH')
   })
+
+  it('resolves one registry, reserves one range, and bounds concurrent batch offers', async () => {
+    let activeOffers = 0
+    let maximumActiveOffers = 0
+    const agent = makeAgent()
+    agent.credentials.createOffer.mockImplementation(async (input: {
+      credentialFormats: { anoncreds: { revocationRegistryIndex: number } }
+    }) => {
+      activeOffers += 1
+      maximumActiveOffers = Math.max(maximumActiveOffers, activeOffers)
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      activeOffers -= 1
+      const index = input.credentialFormats.anoncreds.revocationRegistryIndex
+      return {
+        credentialRecord: { id: `exchange-${index}` },
+        message: { '@id': `offer-${index}` },
+      }
+    })
+    const service = new CredentialService(
+      agent as never,
+      new RevocationIndexStore(join(directory, 'indexes.json')),
+    )
+
+    const result = await service.createBatchOfferInvitations({
+      credentialDefinitionId: 'cred-def-1',
+      revocationRegistryDefinitionId: 'rev-reg-1',
+      students: Array.from({ length: 10 }, (_, index) => ({
+        attributes: [{ name: 'studentNumber', value: `STU${index + 1}` }],
+        externalId: `student-${index + 1}`,
+      })),
+    })
+
+    expect(agent.modules.anoncreds.getRevocationRegistryDefinition).toHaveBeenCalledTimes(1)
+    expect(maximumActiveOffers).toBe(4)
+    expect(result.failures).toEqual([])
+    expect(result.offers.map((offer) => offer.externalId)).toEqual(
+      Array.from({ length: 10 }, (_, index) => `student-${index + 1}`),
+    )
+    expect(result.offers.map((offer) => offer.credentialRevocationId)).toEqual(
+      Array.from({ length: 10 }, (_, index) => String(index + 1)),
+    )
+  })
+
+  it('rejects an undersized registry before creating any batch offers', async () => {
+    const agent = makeAgent()
+    agent.modules.anoncreds.getRevocationRegistryDefinition.mockResolvedValue({
+      revocationRegistryDefinition: {
+        credDefId: 'cred-def-1',
+        value: { maxCredNum: 3 },
+      },
+    })
+    const service = new CredentialService(
+      agent as never,
+      new RevocationIndexStore(join(directory, 'indexes.json')),
+    )
+
+    const error = await service.createBatchOfferInvitations({
+      credentialDefinitionId: 'cred-def-1',
+      revocationRegistryDefinitionId: 'rev-reg-1',
+      students: Array.from({ length: 3 }, (_, index) => ({
+        attributes: [{ name: 'studentNumber', value: `STU${index + 1}` }],
+      })),
+    }).catch((caught) => caught)
+
+    expect(error).toBeInstanceOf(AppError)
+    expect((error as AppError).code).toBe('REVOCATION_REGISTRY_FULL')
+    expect(agent.credentials.createOffer).not.toHaveBeenCalled()
+  })
+
+  it('does not reuse an index assigned to a failed batch offer', async () => {
+    const agent = makeAgent()
+    agent.credentials.createOffer.mockImplementation(async (input: {
+      credentialFormats: { anoncreds: { revocationRegistryIndex: number } }
+    }) => {
+      const index = input.credentialFormats.anoncreds.revocationRegistryIndex
+      if (index === 2) throw new Error('offer failed')
+      return {
+        credentialRecord: { id: `exchange-${index}` },
+        message: { '@id': `offer-${index}` },
+      }
+    })
+    const service = new CredentialService(
+      agent as never,
+      new RevocationIndexStore(join(directory, 'indexes.json')),
+    )
+    const batchInput = {
+      credentialDefinitionId: 'cred-def-1',
+      revocationRegistryDefinitionId: 'rev-reg-1',
+      students: Array.from({ length: 3 }, (_, index) => ({
+        attributes: [{ name: 'studentNumber', value: `STU${index + 1}` }],
+        externalId: `student-${index + 1}`,
+      })),
+    }
+
+    const batch = await service.createBatchOfferInvitations(batchInput)
+    const next = await service.createOfferInvitation({
+      attributes: [{ name: 'studentNumber', value: 'STU004' }],
+      credentialDefinitionId: 'cred-def-1',
+      revocationRegistryDefinitionId: 'rev-reg-1',
+    })
+
+    expect(batch.failures).toEqual([
+      expect.objectContaining({ externalId: 'student-2', message: 'offer failed' }),
+    ])
+    expect(batch.offers.map((offer) => offer.credentialRevocationId)).toEqual(['1', '3'])
+    expect(next.credentialRevocationId).toBe('4')
+  })
 })

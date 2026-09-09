@@ -43,6 +43,15 @@ function parsePositiveInteger(name: string, fallback: number): number {
   return parsed
 }
 
+function parseBoundedPositiveInteger(name: string, fallback: number, maximum: number): number {
+  const parsed = parsePositiveInteger(name, fallback)
+  if (parsed > maximum) {
+    throw new Error(`Environment variable ${name} must be at most ${maximum} (got "${parsed}")`)
+  }
+
+  return parsed
+}
+
 function parseCsv(name: string): string[] {
   const raw = process.env[name]
   if (!raw) return []
@@ -101,6 +110,8 @@ export const config = {
   },
   activations: {
     storeFile: requireEnv('ACTIVATION_STORE_FILE', join(homedir(), '.afj', 'activation-links.json')),
+    batchConcurrency: parseBoundedPositiveInteger('ACTIVATION_BATCH_CONCURRENCY', 4, 16),
+    batchMaxSize: 100,
     idempotencySecret: requireSecret(
       'ACTIVATION_IDEMPOTENCY_SECRET',
       'dev-activation-idempotency-secret',
