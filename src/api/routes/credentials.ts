@@ -9,6 +9,7 @@ import { ActivationLinkService } from '../../services/activationLinkService'
 import { CredentialService } from '../../services/credentialService'
 import { RevocationService } from '../../services/revocationService'
 import type { UniversityAgent } from '../../agent'
+import { config } from '../../config'
 import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireAttributes, requireObject, requireString } from '../validation'
@@ -59,6 +60,14 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       if (!Array.isArray(students) || students.length === 0) {
         throw new AppError(400, 'students must be a non-empty array.')
       }
+      if (students.length > config.activations.batchMaxSize) {
+        throw new AppError(
+          400,
+          `students must contain at most ${config.activations.batchMaxSize} items.`,
+          undefined,
+          'BATCH_SIZE_EXCEEDED',
+        )
+      }
       const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
 
       const input: {
@@ -98,6 +107,14 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       if (!Array.isArray(students) || students.length === 0) {
         throw new AppError(400, 'students must be a non-empty array.')
       }
+      if (students.length > config.activations.batchMaxSize) {
+        throw new AppError(
+          400,
+          `students must contain at most ${config.activations.batchMaxSize} items.`,
+          undefined,
+          'BATCH_SIZE_EXCEEDED',
+        )
+      }
       const revocationRegistryDefinitionId = optionalString(body, 'revocationRegistryDefinitionId')
 
       const input: {
@@ -120,6 +137,17 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
             attributes: requireAttributes(value),
           }
         }),
+      }
+      const idempotencyKeys = input.students.flatMap(({ idempotencyKey }) =>
+        idempotencyKey ? [idempotencyKey] : [],
+      )
+      if (new Set(idempotencyKeys).size !== idempotencyKeys.length) {
+        throw new AppError(
+          400,
+          'students must not contain duplicate idempotency keys.',
+          undefined,
+          'DUPLICATE_IDEMPOTENCY_KEY',
+        )
       }
       const result = await activationLinks.createBatchActivationLinks(
         withRevocationRegistryDefinitionId(input, revocationRegistryDefinitionId),

@@ -126,4 +126,43 @@ describe('ActivationLinkService', () => {
     expect(agent.credentials.createOffer).toHaveBeenCalledTimes(1)
     expect(agent.oob.createInvitation).toHaveBeenCalledTimes(1)
   })
+
+  it('replays existing students, creates only new offers, and persists the batch once', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'unify-activation-links-'))
+    tempDir = dir
+    const store = new ActivationStore(join(dir, 'activations.json'))
+    const saveMany = jest.spyOn(store, 'saveMany')
+    const agent = makeAgent()
+    const service = new ActivationLinkService(agent as never, store)
+    const existingStudent = {
+      attributes: [{ name: 'studentNumber', value: 'STU001' }],
+      externalId: 'student-1',
+      idempotencyKey: 'batch-1:item-1',
+    }
+
+    const first = await service.createBatchActivationLinks({
+      credentialDefinitionId: 'cred-def-id',
+      students: [existingStudent],
+    })
+    const second = await service.createBatchActivationLinks({
+      credentialDefinitionId: 'cred-def-id',
+      students: [
+        existingStudent,
+        {
+          attributes: [{ name: 'studentNumber', value: 'STU002' }],
+          externalId: 'student-2',
+          idempotencyKey: 'batch-1:item-2',
+        },
+      ],
+    })
+
+    expect(agent.credentials.createOffer).toHaveBeenCalledTimes(2)
+    expect(second.failures).toEqual([])
+    expect(second.offers.map((offer) => offer.externalId)).toEqual(['student-1', 'student-2'])
+    expect(second.offers[0].credentialExchangeId).toBe(first.offers[0].credentialExchangeId)
+    expect(saveMany).toHaveBeenCalledTimes(2)
+    expect(saveMany.mock.calls[1][0]).toHaveLength(2)
+    const persisted = JSON.parse(await readFile(join(dir, 'activations.json'), 'utf8')) as { activations: unknown[] }
+    expect(persisted.activations).toHaveLength(2)
+  })
 })

@@ -7,6 +7,7 @@ import type { UniversityAgent } from '../agent'
 import { config } from '../config'
 import { AppError } from '../errors'
 
+import { mapWithConcurrency } from './batchConcurrency'
 import { RevocationIndexStore } from './revocationIndexStore'
 
 export type CredentialOfferInvitationInput = {
@@ -55,9 +56,21 @@ export class CredentialService {
     }
   }
 
-  async createOfferInvitation(_params: CredentialOfferInvitationInput): Promise<CredentialOfferInvitationResult> {
+  async createOfferInvitation(params: CredentialOfferInvitationInput): Promise<CredentialOfferInvitationResult> {
+    const [revocation] = await this.prepareRevocationIndexes(
+      params.credentialDefinitionId,
+      params.revocationRegistryDefinitionId,
+      1,
+    )
+    return this.createOfferInvitationWithRevocation(params, revocation)
+  }
+
+  private async createOfferInvitationWithRevocation(
+    params: CredentialOfferInvitationInput,
+    revocation?: { revocationRegistryDefinitionId: string; revocationRegistryIndex: number },
+  ): Promise<CredentialOfferInvitationResult> {
     // AnonCreds attributes are strings on the wire, even when the portal sends numbers.
-    const attributes = _params.attributes.map((attribute) => ({
+    const attributes = params.attributes.map((attribute) => ({
       name: String(attribute.name),
       value: String(attribute.value ?? ''),
     }))
@@ -70,18 +83,11 @@ export class CredentialService {
       })),
     )
 
-    const revocation = _params.revocationRegistryDefinitionId
-      ? await this.allocateRevocationIndex(
-          _params.credentialDefinitionId,
-          _params.revocationRegistryDefinitionId,
-        )
-      : undefined
-
     const { message, credentialRecord } = await this.agent.credentials.createOffer({
       protocolVersion: 'v2',
       credentialFormats: {
         anoncreds: {
-          credentialDefinitionId: _params.credentialDefinitionId,
+          credentialDefinitionId: params.credentialDefinitionId,
           ...(revocation
             ? {
                 revocationRegistryDefinitionId: revocation.revocationRegistryDefinitionId,
@@ -111,10 +117,15 @@ export class CredentialService {
     return result
   }
 
-  private async allocateRevocationIndex(
+  private async prepareRevocationIndexes(
     credentialDefinitionId: string,
-    revocationRegistryDefinitionId: string,
-  ) {
+    revocationRegistryDefinitionId: string | undefined,
+    count: number,
+  ): Promise<Array<{ revocationRegistryDefinitionId: string; revocationRegistryIndex: number } | undefined>> {
+    if (!revocationRegistryDefinitionId || count === 0) {
+      return Array.from({ length: count }, () => undefined)
+    }
+
     const result = await this.agent.modules.anoncreds.getRevocationRegistryDefinition(
       revocationRegistryDefinitionId,
     )
@@ -136,13 +147,63 @@ export class CredentialService {
       throw new AppError(422, 'Revocation registry has an invalid maximum credential count.')
     }
 
-    return {
+    const indexes = await this.revocationIndexes.reserveRange(
       revocationRegistryDefinitionId,
-      revocationRegistryIndex: await this.revocationIndexes.reserve(
-        revocationRegistryDefinitionId,
-        maximumCredentialNumber,
-      ),
+      count,
+      maximumCredentialNumber,
+    )
+    return indexes.map((revocationRegistryIndex) => ({
+      revocationRegistryDefinitionId,
+      revocationRegistryIndex,
+    }))
+  }
+
+  async createBatchOfferResults(params: {
+    credentialDefinitionId: string
+    revocationRegistryDefinitionId?: string
+    students: Array<{
+      externalId?: string
+      email?: string
+      attributes: Array<{ name: string; value: string }>
+    }>
+  }): Promise<Array<{
+    student: {
+      externalId?: string
+      email?: string
+      attributes: Array<{ name: string; value: string }>
     }
+    offer?: CredentialOfferInvitationResult
+    message?: string
+  }>> {
+    const revocations = await this.prepareRevocationIndexes(
+      params.credentialDefinitionId,
+      params.revocationRegistryDefinitionId,
+      params.students.length,
+    )
+
+    return mapWithConcurrency(
+      params.students,
+      config.activations.batchConcurrency,
+      async (student, index) => {
+        const input: CredentialOfferInvitationInput = {
+          credentialDefinitionId: params.credentialDefinitionId,
+          attributes: student.attributes,
+        }
+
+        try {
+          const offer = await this.createOfferInvitationWithRevocation(
+            withRevocationRegistryDefinitionId(input, params.revocationRegistryDefinitionId),
+            revocations[index],
+          )
+          return { offer, student }
+        } catch (error) {
+          return {
+            message: error instanceof Error ? error.message : String(error),
+            student,
+          }
+        }
+      },
+    )
   }
 
   async createBatchOfferInvitations(_params: {
@@ -176,26 +237,19 @@ export class CredentialService {
     }> = []
     const failures: Array<{ externalId?: string; email?: string; message: string }> = []
 
-    for (const student of _params.students) {
-      try {
-        // Keep going when one student fails so a bad row does not block the whole batch.
-        const input: CredentialOfferInvitationInput = {
-          credentialDefinitionId: _params.credentialDefinitionId,
-          attributes: student.attributes,
-        }
-        const offer = await this.createOfferInvitation(
-          withRevocationRegistryDefinitionId(input, _params.revocationRegistryDefinitionId),
-        )
+    const results = await this.createBatchOfferResults(_params)
+    for (const result of results) {
+      if (result.offer) {
         offers.push({
-          externalId: student.externalId,
-          email: student.email,
-          ...offer,
+          externalId: result.student.externalId,
+          email: result.student.email,
+          ...result.offer,
         })
-      } catch (error) {
+      } else {
         failures.push({
-          externalId: student.externalId,
-          email: student.email,
-          message: error instanceof Error ? error.message : String(error),
+          externalId: result.student.externalId,
+          email: result.student.email,
+          message: result.message ?? 'Credential offer creation failed.',
         })
       }
     }

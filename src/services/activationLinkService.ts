@@ -25,8 +25,6 @@ type StudentActivationInput = {
   idempotencyKey?: string
 }
 
-type CredentialOfferInput = Parameters<CredentialService['createOfferInvitation']>[0]
-
 export type BatchActivationLinkResult = {
   failures: Array<{ email?: string; externalId?: string; message: string }>
   offers: Array<{
@@ -80,17 +78,6 @@ function optionalStringProperty(value: object, key: string): string | undefined 
   return typeof property === 'string' && property ? property : undefined
 }
 
-function withRevocationRegistryDefinitionId<T extends object>(
-  input: T,
-  revocationRegistryDefinitionId?: string,
-): T & { revocationRegistryDefinitionId?: string } {
-  if (revocationRegistryDefinitionId) {
-    ;(input as Record<string, unknown>).revocationRegistryDefinitionId = revocationRegistryDefinitionId
-  }
-
-  return input as T & { revocationRegistryDefinitionId?: string }
-}
-
 /** Couples a credential offer to an expiring activation capability for the wallet. */
 export class ActivationLinkService {
   private readonly credentials: CredentialService
@@ -108,130 +95,171 @@ export class ActivationLinkService {
     revocationRegistryDefinitionId?: string
     students: StudentActivationInput[]
   }): Promise<BatchActivationLinkResult> {
-    const offers: BatchActivationLinkResult['offers'] = []
-    const failures: BatchActivationLinkResult['failures'] = []
-
-    for (const student of params.students) {
-      try {
-        const input: {
-          credentialDefinitionId: string
-          revocationRegistryDefinitionId?: string
-          student: StudentActivationInput
-        } = {
-          credentialDefinitionId: params.credentialDefinitionId,
-          student,
-        }
-        const offer = await this.createActivationLink(
-          withRevocationRegistryDefinitionId(input, params.revocationRegistryDefinitionId),
-        )
-        offers.push(offer)
-      } catch (error) {
-        failures.push({
-          ...(student.email ? { email: student.email } : {}),
-          ...(student.externalId ? { externalId: student.externalId } : {}),
-          message: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
-
-    return { offers, failures }
-  }
-
-  private async createActivationLink(params: {
-    credentialDefinitionId: string
-    revocationRegistryDefinitionId?: string
-    student: StudentActivationInput
-  }): Promise<BatchActivationLinkResult['offers'][number]> {
-    const operation = () => this.createActivationLinkUnlocked(params)
+    const operation = () => this.createBatchActivationLinksUnlocked(params)
     const result = this.operationQueue.then(operation, operation)
     this.operationQueue = result.then(() => undefined, () => undefined)
     return result
   }
 
-  private async createActivationLinkUnlocked(params: {
+  private async createBatchActivationLinksUnlocked(params: {
     credentialDefinitionId: string
     revocationRegistryDefinitionId?: string
-    student: StudentActivationInput
-  }): Promise<BatchActivationLinkResult['offers'][number]> {
-    const keyHash = params.student.idempotencyKey
-      ? idempotencyKeyHash(params.student.idempotencyKey)
-      : undefined
-    const token = params.student.idempotencyKey
-      ? tokenForIdempotencyKey(params.student.idempotencyKey)
-      : generateActivationToken()
-    if (keyHash) {
-      const existing = await this.store.findByIdempotencyKeyHash(keyHash)
-      if (existing) {
-        const expiresAt = expiresAtFrom(new Date())
-        await this.store.save({ ...existing, expiresAt, tokenHash: hashActivationToken(token) })
-        return {
-          activationId: existing.activationId,
-          activationUrl: activationUrlForToken(token),
-          credentialExchangeId: existing.credentialExchangeId,
-          outOfBandId: existing.outOfBandId ?? existing.invitationId,
-          expiresAt,
-          ...(existing.credentialRevocationId
-            ? { credentialRevocationId: existing.credentialRevocationId }
-            : {}),
-          ...(existing.revocationRegistryDefinitionId
-            ? { revocationRegistryDefinitionId: existing.revocationRegistryDefinitionId }
-            : {}),
-          ...(params.student.email ? { email: params.student.email } : {}),
-          ...(params.student.externalId ? { externalId: params.student.externalId } : {}),
+    students: StudentActivationInput[]
+  }): Promise<BatchActivationLinkResult> {
+    const startedAt = Date.now()
+    const recordsToSave: StoredActivationRecord[] = []
+    const outcomes = new Array<
+      | { kind: 'offer'; value: BatchActivationLinkResult['offers'][number] }
+      | { kind: 'failure'; value: BatchActivationLinkResult['failures'][number] }
+    >(params.students.length)
+    let replayedCount = 0
+
+    console.info('[activation-links] batch started', {
+      concurrency: config.activations.batchConcurrency,
+      requestedCount: params.students.length,
+      revocable: Boolean(params.revocationRegistryDefinitionId),
+    })
+
+    try {
+      const keyedStudents = params.students
+        .map((student, inputIndex) => ({
+          inputIndex,
+          keyHash: student.idempotencyKey ? idempotencyKeyHash(student.idempotencyKey) : undefined,
+          student,
+        }))
+      const existingByKeyHash = await this.store.findByIdempotencyKeyHashes(
+        keyedStudents.flatMap(({ keyHash }) => (keyHash ? [keyHash] : [])),
+      )
+      const studentsToIssue: Array<{
+        inputIndex: number
+        keyHash?: string
+        student: StudentActivationInput
+        token: string
+      }> = []
+      const batchTime = new Date()
+
+      for (const entry of keyedStudents) {
+        const token = entry.student.idempotencyKey
+          ? tokenForIdempotencyKey(entry.student.idempotencyKey)
+          : generateActivationToken()
+        const existing = entry.keyHash ? existingByKeyHash.get(entry.keyHash) : undefined
+
+        if (!existing) {
+          studentsToIssue.push({ ...entry, token })
+          continue
+        }
+
+        replayedCount += 1
+        const expiresAt = expiresAtFrom(batchTime)
+        recordsToSave.push({ ...existing, expiresAt, tokenHash: hashActivationToken(token) })
+        outcomes[entry.inputIndex] = {
+          kind: 'offer',
+          value: {
+            activationId: existing.activationId,
+            activationUrl: activationUrlForToken(token),
+            credentialExchangeId: existing.credentialExchangeId,
+            outOfBandId: existing.outOfBandId ?? existing.invitationId,
+            expiresAt,
+            ...(existing.credentialRevocationId
+              ? { credentialRevocationId: existing.credentialRevocationId }
+              : {}),
+            ...(existing.revocationRegistryDefinitionId
+              ? { revocationRegistryDefinitionId: existing.revocationRegistryDefinitionId }
+              : {}),
+            ...(entry.student.email ? { email: entry.student.email } : {}),
+            ...(entry.student.externalId ? { externalId: entry.student.externalId } : {}),
+          },
         }
       }
-    }
-    const activationId = generateActivationId()
-    const createdAt = new Date()
-    const input: CredentialOfferInput = {
-      attributes: params.student.attributes,
-      credentialDefinitionId: params.credentialDefinitionId,
-    }
-    const offer = await this.credentials.createOfferInvitation(
-      withRevocationRegistryDefinitionId(input, params.revocationRegistryDefinitionId),
-    )
-    const credentialRevocationId = optionalStringProperty(offer, 'credentialRevocationId')
-    const revocationRegistryDefinitionId = optionalStringProperty(offer, 'revocationRegistryDefinitionId')
-    const invitationId = invitationIdFromUrl(offer.invitationUrl, `unify-oob-${suffixFor(activationId)}`)
-    const expiresAt = expiresAtFrom(createdAt)
-    // Only the token hash is stored so a leaked activation store cannot open offers.
-    const record: StoredActivationRecord = {
-      activationId,
-      createdAt: createdAt.toISOString(),
-      credentialExchangeId: offer.credentialExchangeId,
-      expiresAt,
-      invitationId,
-      invitationUrl: offer.invitationUrl,
-      ...(keyHash ? { idempotencyKeyHash: keyHash } : {}),
-      issuerLabel: config.activations.issuerLabel,
-      outOfBandId: offer.outOfBandId,
-      tokenHash: hashActivationToken(token),
-    }
-    if (credentialRevocationId) {
-      record.credentialRevocationId = credentialRevocationId
-    }
-    if (revocationRegistryDefinitionId) {
-      record.revocationRegistryDefinitionId = revocationRegistryDefinitionId
-    }
 
-    await this.store.save(record)
+      if (studentsToIssue.length > 0) {
+        const offerResults = await this.credentials.createBatchOfferResults({
+          credentialDefinitionId: params.credentialDefinitionId,
+          ...(params.revocationRegistryDefinitionId
+            ? { revocationRegistryDefinitionId: params.revocationRegistryDefinitionId }
+            : {}),
+          students: studentsToIssue.map(({ student }) => student),
+        })
 
-    const result: BatchActivationLinkResult['offers'][number] = {
-      activationId,
-      activationUrl: activationUrlForToken(token),
-      credentialExchangeId: offer.credentialExchangeId,
-      outOfBandId: offer.outOfBandId,
-      expiresAt,
-      ...(params.student.email ? { email: params.student.email } : {}),
-      ...(params.student.externalId ? { externalId: params.student.externalId } : {}),
-    }
-    if (credentialRevocationId) {
-      result.credentialRevocationId = credentialRevocationId
-    }
-    if (revocationRegistryDefinitionId) {
-      result.revocationRegistryDefinitionId = revocationRegistryDefinitionId
-    }
+        for (let index = 0; index < offerResults.length; index += 1) {
+          const pending = studentsToIssue[index]
+          const offerResult = offerResults[index]
 
-    return result
+          if (!offerResult.offer) {
+            outcomes[pending.inputIndex] = {
+              kind: 'failure',
+              value: {
+                ...(pending.student.email ? { email: pending.student.email } : {}),
+                ...(pending.student.externalId ? { externalId: pending.student.externalId } : {}),
+                message: offerResult.message ?? 'Credential offer creation failed.',
+              },
+            }
+            continue
+          }
+
+          const offer = offerResult.offer
+          const activationId = generateActivationId()
+          const credentialRevocationId = optionalStringProperty(offer, 'credentialRevocationId')
+          const revocationRegistryDefinitionId = optionalStringProperty(offer, 'revocationRegistryDefinitionId')
+          const invitationId = invitationIdFromUrl(offer.invitationUrl, `unify-oob-${suffixFor(activationId)}`)
+          const expiresAt = expiresAtFrom(batchTime)
+          const record: StoredActivationRecord = {
+            activationId,
+            createdAt: batchTime.toISOString(),
+            credentialExchangeId: offer.credentialExchangeId,
+            expiresAt,
+            invitationId,
+            invitationUrl: offer.invitationUrl,
+            ...(pending.keyHash ? { idempotencyKeyHash: pending.keyHash } : {}),
+            issuerLabel: config.activations.issuerLabel,
+            outOfBandId: offer.outOfBandId,
+            tokenHash: hashActivationToken(pending.token),
+            ...(credentialRevocationId ? { credentialRevocationId } : {}),
+            ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
+          }
+          recordsToSave.push(record)
+          outcomes[pending.inputIndex] = {
+            kind: 'offer',
+            value: {
+              activationId,
+              activationUrl: activationUrlForToken(pending.token),
+              credentialExchangeId: offer.credentialExchangeId,
+              outOfBandId: offer.outOfBandId,
+              expiresAt,
+              ...(pending.student.email ? { email: pending.student.email } : {}),
+              ...(pending.student.externalId ? { externalId: pending.student.externalId } : {}),
+              ...(credentialRevocationId ? { credentialRevocationId } : {}),
+              ...(revocationRegistryDefinitionId ? { revocationRegistryDefinitionId } : {}),
+            },
+          }
+        }
+      }
+
+      await this.store.saveMany(recordsToSave)
+      const offers = outcomes.flatMap((outcome) => outcome?.kind === 'offer' ? [outcome.value] : [])
+      const failures = outcomes.flatMap((outcome) => outcome?.kind === 'failure' ? [outcome.value] : [])
+
+      console.info('[activation-links] batch completed', {
+        concurrency: config.activations.batchConcurrency,
+        durationMs: Date.now() - startedAt,
+        failedCount: failures.length,
+        newCount: studentsToIssue.length,
+        replayedCount,
+        requestedCount: params.students.length,
+        revocable: Boolean(params.revocationRegistryDefinitionId),
+        successfulCount: offers.length,
+      })
+
+      return { offers, failures }
+    } catch (error) {
+      console.error('[activation-links] batch failed', {
+        concurrency: config.activations.batchConcurrency,
+        durationMs: Date.now() - startedAt,
+        replayedCount,
+        requestedCount: params.students.length,
+        revocable: Boolean(params.revocationRegistryDefinitionId),
+      })
+      throw error
+    }
   }
 }

@@ -15,17 +15,30 @@ type RevocationIndexStoreFile = {
 
 /** Reserves monotonically increasing indexes for each revocation registry. */
 export class RevocationIndexStore {
-  private operationQueue: Promise<void> = Promise.resolve()
+  private static readonly operationQueues = new Map<string, Promise<void>>()
 
   constructor(private readonly filePath = config.revocationIndexes.storeFile) {}
 
   async reserve(revocationRegistryDefinitionId: string, maximumCredentialNumber: number): Promise<number> {
+    const [reserved] = await this.reserveRange(revocationRegistryDefinitionId, 1, maximumCredentialNumber)
+    return reserved
+  }
+
+  async reserveRange(
+    revocationRegistryDefinitionId: string,
+    count: number,
+    maximumCredentialNumber: number,
+  ): Promise<number[]> {
+    if (!Number.isSafeInteger(count) || count <= 0) {
+      throw new AppError(400, 'Revocation index reservation count must be a positive integer.')
+    }
+
     return this.withLock(async () => {
       const state = await this.readState()
       const nextIndex = state.nextIndexByRegistry[revocationRegistryDefinitionId] ?? 1
 
       // Credo treats maxCredNum as an exclusive upper bound for the registry index.
-      if (nextIndex >= maximumCredentialNumber) {
+      if (nextIndex + count > maximumCredentialNumber) {
         throw new AppError(
           409,
           'Revocation registry has no unused credential indexes. Register a new revocation registry before issuing more credentials.',
@@ -34,18 +47,20 @@ export class RevocationIndexStore {
         )
       }
 
-      state.nextIndexByRegistry[revocationRegistryDefinitionId] = nextIndex + 1
+      const reserved = Array.from({ length: count }, (_, offset) => nextIndex + offset)
+      state.nextIndexByRegistry[revocationRegistryDefinitionId] = nextIndex + count
       await this.writeState(state)
-      return nextIndex
+      return reserved
     })
   }
 
   private async withLock<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.operationQueue.then(operation, operation)
-    this.operationQueue = result.then(
+    const previous = RevocationIndexStore.operationQueues.get(this.filePath) ?? Promise.resolve()
+    const result = previous.then(operation, operation)
+    RevocationIndexStore.operationQueues.set(this.filePath, result.then(
       () => undefined,
       () => undefined,
-    )
+    ))
     return result
   }
 

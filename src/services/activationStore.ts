@@ -45,19 +45,35 @@ export function hashActivationToken(token: string): string {
 
 /** Serializes activation-record reads and writes against one JSON document. */
 export class ActivationStore {
+  private static readonly operationQueues = new Map<string, Promise<void>>()
+
   constructor(private readonly filePath = config.activations.storeFile) {}
 
   async save(record: StoredActivationRecord): Promise<void> {
-    const activations = await this.readAll()
-    const existingIndex = activations.findIndex((activation) => activation.activationId === record.activationId)
+    await this.saveMany([record])
+  }
 
-    if (existingIndex >= 0) {
-      activations[existingIndex] = record
-    } else {
-      activations.push(record)
-    }
+  async saveMany(records: StoredActivationRecord[]): Promise<void> {
+    if (records.length === 0) return
 
-    await this.writeAll(activations)
+    await this.withLock(async () => {
+      const activations = await this.readAll()
+      const indexByActivationId = new Map(
+        activations.map((activation, index) => [activation.activationId, index] as const),
+      )
+
+      for (const record of records) {
+        const existingIndex = indexByActivationId.get(record.activationId)
+        if (existingIndex === undefined) {
+          indexByActivationId.set(record.activationId, activations.length)
+          activations.push(record)
+        } else {
+          activations[existingIndex] = record
+        }
+      }
+
+      await this.writeAll(activations)
+    })
   }
 
   async findByToken(token: string): Promise<StoredActivationRecord | undefined> {
@@ -67,12 +83,35 @@ export class ActivationStore {
   }
 
   async findByIdempotencyKeyHash(idempotencyKeyHash: string): Promise<StoredActivationRecord | undefined> {
+    return (await this.findByIdempotencyKeyHashes([idempotencyKeyHash])).get(idempotencyKeyHash)
+  }
+
+  async findByIdempotencyKeyHashes(
+    idempotencyKeyHashes: readonly string[],
+  ): Promise<Map<string, StoredActivationRecord>> {
+    if (idempotencyKeyHashes.length === 0) return new Map()
+
+    const requested = new Set(idempotencyKeyHashes)
     const activations = await this.readAll()
-    return activations.find((activation) => activation.idempotencyKeyHash === idempotencyKeyHash)
+    return new Map(
+      activations
+        .filter(
+          (activation): activation is StoredActivationRecord & { idempotencyKeyHash: string } =>
+            Boolean(activation.idempotencyKeyHash && requested.has(activation.idempotencyKeyHash)),
+        )
+        .map((activation) => [activation.idempotencyKeyHash, activation] as const),
+    )
   }
 
   async clear(): Promise<void> {
-    await this.writeAll([])
+    await this.withLock(() => this.writeAll([]))
+  }
+
+  private async withLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = ActivationStore.operationQueues.get(this.filePath) ?? Promise.resolve()
+    const result = previous.then(operation, operation)
+    ActivationStore.operationQueues.set(this.filePath, result.then(() => undefined, () => undefined))
+    return result
   }
 
   private async readAll(): Promise<StoredActivationRecord[]> {
