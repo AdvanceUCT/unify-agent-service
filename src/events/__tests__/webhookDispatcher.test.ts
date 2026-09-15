@@ -120,6 +120,34 @@ describe('dispatchWebhook', () => {
 
     const body = String(fetchFn.mock.calls[0][1].body)
     expect(body).toContain('verification-001')
-    expect(body).not.toContain('studentNumber')
+    expect(body).not.toContain('attributes')
+  })
+
+  it('dispatches disclosed student attributes when the verification completion event includes them', async () => {
+    const fetchFn = jest.fn().mockResolvedValue({ ok: true, status: 202 })
+    const proofPayload: WebhookPayload = {
+      eventId: 'verification:verification-001:2026-06-23T10:00:00.000Z',
+      verificationRequestId: 'verification-001',
+      vendorId: 'vendor-001',
+      servicePointId: 'service-point-001',
+      decision: 'Approved',
+      isVerified: true,
+      attributes: {
+        firstName: 'Caleb',
+        lastName: 'Voskuil',
+        studentNumber: 'VOSCAL100',
+        institution: 'University of Cape Town',
+      },
+      expiresAt: '2026-06-23T10:05:00.000Z',
+      completedAt: '2026-06-23T10:00:00.000Z',
+      timestamp: '2026-06-23T10:00:00.000Z',
+      type: 'verification.completed',
+    }
+
+    await dispatchWebhook(proofPayload, { fetchFn, url: 'https://admin.example.test/api/webhooks/agent' })
+
+    const body = String(fetchFn.mock.calls[0][1].body)
+    expect(body).toContain('studentNumber')
+    expect(body).toContain('VOSCAL100')
   })
 })
