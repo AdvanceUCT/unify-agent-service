@@ -35,6 +35,8 @@ export function registerProofEventHandlers(
         vendorId: status.vendorId,
         servicePointId: status.servicePointId,
         decision: status.status,
+        ...(status.isVerified !== undefined ? { isVerified: status.isVerified } : {}),
+        ...(status.attributes ? { attributes: status.attributes } : {}),
         failureCode: status.failureCode,
         expiresAt: status.expiresAt,
         completedAt: status.completedAt,

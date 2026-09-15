@@ -26,15 +26,21 @@ function setup(status?: Record<string, unknown>) {
 }
 
 describe('registerProofEventHandlers', () => {
-  it('correlates proof state changes and emits a privacy-safe webhook', async () => {
+  it('correlates proof state changes and emits the disclosed attributes to the signed portal webhook', async () => {
     const context = setup({
       verificationRequestId: 'verification-001',
       vendorId: 'vendor-001',
       servicePointId: 'service-point-001',
       status: 'Approved',
+      isVerified: true,
       completedAt: '2026-06-23T10:00:00.000Z',
       expiresAt: '2026-06-23T10:05:00.000Z',
-      attributes: { studentNumber: 'VOSCAL100' },
+      attributes: {
+        firstName: 'Caleb',
+        lastName: 'Voskuil',
+        studentNumber: 'VOSCAL100',
+        institution: 'University of Cape Town',
+      },
     })
 
     await context.emit({ id: 'proof-001', state: 'done' }, 'presentation-received')
@@ -46,11 +52,16 @@ describe('registerProofEventHandlers', () => {
         vendorId: 'vendor-001',
         servicePointId: 'service-point-001',
         decision: 'Approved',
+        isVerified: true,
+        attributes: {
+          firstName: 'Caleb',
+          lastName: 'Voskuil',
+          studentNumber: 'VOSCAL100',
+          institution: 'University of Cape Town',
+        },
         type: 'verification.completed',
       }),
     )
-    expect(JSON.stringify(context.webhookDispatcher.mock.calls[0][0])).not.toContain('studentNumber')
-    expect(JSON.stringify(context.webhookDispatcher.mock.calls[0][0])).not.toContain('VOSCAL100')
   })
 
   it('ignores Credo proof records that do not belong to verifier sessions', async () => {

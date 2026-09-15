@@ -6,6 +6,7 @@
 import { createHmac, randomUUID } from 'node:crypto'
 
 import { config } from '../config'
+import type { RevealedVerificationAttributes } from '../services/verificationTypes'
 
 export type ConnectionStateChangedWebhookPayload = {
   connectionId: string
@@ -48,6 +49,8 @@ export type VerificationCompletedWebhookPayload = {
   vendorId: string
   servicePointId: string
   decision: string
+  isVerified?: boolean
+  attributes?: RevealedVerificationAttributes
   failureCode?: string
   expiresAt: string
   completedAt: string
