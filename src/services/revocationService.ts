@@ -48,14 +48,14 @@ export class RevocationService {
     if (existing) return existing
 
     const metadata = await requireCredentialRevocationMetadata(this.agent, credentialExchangeId)
-    return {
+    return this.store.save({
       credentialExchangeId,
       ...metadata,
       status: 'ACTIVE',
       revision: 0,
       eventId: `lifecycle-baseline:${credentialExchangeId}`,
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
   async suspend(params: { credentialExchangeId: string; reason?: string; expectedRevision?: number }): Promise<CredentialLifecycleResult> {

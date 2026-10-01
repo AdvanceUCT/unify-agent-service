@@ -660,13 +660,7 @@ export class VerificationService {
 
       return {
         attributes,
-        credentialDefinitionIds: [
-          ...new Set(
-            (presentation.identifiers ?? [])
-              .map((identifier) => identifier.cred_def_id)
-              .filter((id): id is string => typeof id === 'string' && id.length > 0),
-          ),
-        ],
+        credentialDefinitionIds: [presentation.identifiers![index!].cred_def_id!],
       }
     } catch (error) {
       throw new AppError(

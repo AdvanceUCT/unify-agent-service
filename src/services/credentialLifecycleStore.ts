@@ -79,9 +79,10 @@ export class CredentialLifecycleStore {
       if (!Array.isArray(parsed.credentials)) throw new Error('Expected a credentials array.')
       let migrated = false
       const credentials = parsed.credentials.map(record => {
+        if (record.revision !== undefined && (!Number.isSafeInteger(record.revision) || record.revision < 0)) throw new Error('Invalid lifecycle revision.')
         if (record.revision === undefined || !record.eventId) {
           migrated = true
-          return { ...record, revision: record.revision ?? 0, eventId: record.eventId ?? `lifecycle-baseline:${record.credentialExchangeId}` }
+          return { ...record, revision: record.revision ?? 0, eventId: record.eventId || `lifecycle-baseline:${record.credentialExchangeId}` }
         }
         if (!Number.isSafeInteger(record.revision) || record.revision < 0) throw new Error('Invalid lifecycle revision.')
         return record

@@ -134,6 +134,22 @@ describe('RevocationService', () => {
     expect(agent.modules.anoncreds.updateRevocationStatusList).toHaveBeenCalledTimes(2)
   })
 
+  it('rejects a stale scheduled revision before touching the ledger', async () => {
+    const agent = makeAgent()
+    await store.save({ ...activeRecord(), status: 'SUSPENDED', revision: 3, eventId: 'suspension-3' })
+    await expect(new RevocationService(agent as never, store, jest.fn()).reactivate({ credentialExchangeId: 'exchange-1', expectedRevision: 1 })).rejects.toMatchObject({ status: 409, code: 'LIFECYCLE_REVISION_CONFLICT' })
+    expect(agent.modules.anoncreds.updateRevocationStatusList).not.toHaveBeenCalled()
+  })
+
+  it('migrates historical records to stable baseline identity without changing status', async () => {
+    const legacy = { ...activeRecord(), status: 'SUSPENDED' as const, revision: undefined, eventId: undefined }
+    await store.save(legacy)
+    const first = await store.findByCredentialExchangeId('exchange-1')
+    const restarted = new CredentialLifecycleStore(join(directory, 'lifecycle.json'))
+    expect(await restarted.findByCredentialExchangeId('exchange-1')).toEqual(first)
+    expect(first).toMatchObject({ status: 'SUSPENDED', revision: 0, eventId: 'lifecycle-baseline:exchange-1' })
+  })
+
   it('does not change local state when the ledger update fails', async () => {
     const agent = makeAgent({
       revocationStatusListState: { state: 'failed', reason: 'ledger unavailable' },
