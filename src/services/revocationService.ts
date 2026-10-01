@@ -58,15 +58,15 @@ export class RevocationService {
     }
   }
 
-  async suspend(params: { credentialExchangeId: string; reason?: string }): Promise<CredentialLifecycleResult> {
+  async suspend(params: { credentialExchangeId: string; reason?: string; expectedRevision?: number }): Promise<CredentialLifecycleResult> {
     return this.withLock(() => this.changeLifecycle('suspend', params))
   }
 
-  async reactivate(params: { credentialExchangeId: string; reason?: string }): Promise<CredentialLifecycleResult> {
+  async reactivate(params: { credentialExchangeId: string; reason?: string; expectedRevision?: number }): Promise<CredentialLifecycleResult> {
     return this.withLock(() => this.changeLifecycle('reactivate', params))
   }
 
-  async revoke(params: { credentialExchangeId: string; reason?: string }): Promise<CredentialLifecycleResult> {
+  async revoke(params: { credentialExchangeId: string; reason?: string; expectedRevision?: number }): Promise<CredentialLifecycleResult> {
     return this.withLock(() => this.changeLifecycle('revoke', params))
   }
 
@@ -81,12 +81,13 @@ export class RevocationService {
 
   private async changeLifecycle(
     operation: LifecycleOperation,
-    params: { credentialExchangeId: string; reason?: string },
+    params: { credentialExchangeId: string; reason?: string; expectedRevision?: number },
   ): Promise<CredentialLifecycleResult> {
     const existing = await this.store.findByCredentialExchangeId(params.credentialExchangeId)
     const metadata = existing ?? (await requireCredentialRevocationMetadata(this.agent, params.credentialExchangeId))
     const previousStatus: CredentialLifecycleStatus = existing?.status ?? 'ACTIVE'
 
+    if (params.expectedRevision !== undefined && params.expectedRevision !== (existing?.revision ?? 0)) throw new AppError(409, 'Credential lifecycle changed before the scheduled operation.', undefined, 'LIFECYCLE_REVISION_CONFLICT')
     const idempotent = this.idempotentResult(operation, existing)
     if (idempotent) return idempotent
     this.assertTransition(operation, previousStatus, existing)
@@ -110,6 +111,7 @@ export class RevocationService {
     const record: CredentialLifecycleRecord = {
       ...existing,
       revision,
+      previousStatus,
       eventId,
       credentialExchangeId: params.credentialExchangeId,
       credentialRevocationId: metadata.credentialRevocationId,

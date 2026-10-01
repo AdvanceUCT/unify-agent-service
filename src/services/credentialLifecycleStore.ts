@@ -16,6 +16,7 @@ export type CredentialLifecycleRecord = {
   credentialRevocationId: string
   revocationRegistryDefinitionId: string
   status: CredentialLifecycleStatus
+  previousStatus?: CredentialLifecycleStatus
   revision?: number
   eventId?: string
   statusListTimestamp?: number
