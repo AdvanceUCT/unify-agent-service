@@ -40,6 +40,10 @@ export class RevocationService {
   ) {}
 
   async getLifecycle(credentialExchangeId: string): Promise<CredentialLifecycleResult> {
+    return this.withLock(() => this.lifecycleSnapshot(credentialExchangeId))
+  }
+
+  private async lifecycleSnapshot(credentialExchangeId: string): Promise<CredentialLifecycleResult> {
     const existing = await this.store.findByCredentialExchangeId(credentialExchangeId)
     if (existing) return existing
 
@@ -48,6 +52,8 @@ export class RevocationService {
       credentialExchangeId,
       ...metadata,
       status: 'ACTIVE',
+      revision: 0,
+      eventId: `lifecycle-baseline:${credentialExchangeId}`,
       updatedAt: new Date().toISOString(),
     }
   }
@@ -96,10 +102,15 @@ export class RevocationService {
       })
     }
 
+    const eventId = randomUUID()
+    const revision = (existing?.revision ?? 0) + 1
+    if (!Number.isSafeInteger(revision)) throw new AppError(500, 'Lifecycle revision exhausted.')
     const timestamp = new Date().toISOString()
     const status: CredentialLifecycleStatus = operation === 'reactivate' ? 'ACTIVE' : operation === 'suspend' ? 'SUSPENDED' : 'REVOKED'
     const record: CredentialLifecycleRecord = {
       ...existing,
+      revision,
+      eventId,
       credentialExchangeId: params.credentialExchangeId,
       credentialRevocationId: metadata.credentialRevocationId,
       revocationRegistryDefinitionId: metadata.revocationRegistryDefinitionId,
@@ -115,11 +126,11 @@ export class RevocationService {
     // The ledger update succeeds before local persistence, and local persistence succeeds
     // before the webhook, so the portal is never told about an uncommitted lifecycle state.
     await this.store.save(record)
-    const eventId = randomUUID()
     await this.webhookDispatcher({
       credentialExchangeId: record.credentialExchangeId,
       credentialRevocationId: record.credentialRevocationId,
       eventId,
+      revision,
       previousStatus,
       reason: record.reason,
       revocationRegistryDefinitionId: record.revocationRegistryDefinitionId,

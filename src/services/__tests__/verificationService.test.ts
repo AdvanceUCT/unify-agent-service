@@ -56,7 +56,7 @@ function makeAgent() {
           anoncreds: {
             requested_proof: {
               revealed_attr_groups: {
-                student_details: { values: revealedAttributes },
+                student_details: { sub_proof_index: 0, values: revealedAttributes },
               },
             },
             identifiers: [{ cred_def_id: 'cred-def-001' }],
@@ -100,6 +100,7 @@ describe('VerificationService', () => {
     return new VerificationService(agent as never, store, {
       now: () => now,
       trustedCredentialDefinitionIds: ['cred-def-001'],
+      legacyValidityDefinitionIds: ['cred-def-001', 'cred-def-002'],
       resultTokenSecret: 'test-result-token-secret',
       rateLimiter: new VerificationRateLimiter({ perIp: 100, perServicePoint: 100 }),
       ...overrides,

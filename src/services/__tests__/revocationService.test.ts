@@ -12,6 +12,8 @@ function activeRecord(): CredentialLifecycleRecord {
     credentialRevocationId: '7',
     revocationRegistryDefinitionId: 'rev-reg-1',
     status: 'ACTIVE',
+    revision: 0,
+    eventId: 'lifecycle-baseline:exchange-1',
     updatedAt: '2026-07-08T10:00:00.000Z',
   }
 }
@@ -116,6 +118,20 @@ describe('RevocationService', () => {
     expect(error).toBeInstanceOf(AppError)
     expect((error as AppError).status).toBe(409)
     expect((error as AppError).code).toBe('CREDENTIAL_REVOKED')
+  })
+
+  it('persists revisions and stable event identity across retries and restart', async () => {
+    const agent = makeAgent()
+    const webhook = jest.fn()
+    await store.save(activeRecord())
+    const service = new RevocationService(agent as never, store, webhook)
+    const first = await service.suspend({ credentialExchangeId: 'exchange-1' })
+    expect(first.revision).toBe(1)
+    expect(webhook).toHaveBeenCalledWith(expect.objectContaining({ revision: 1, eventId: first.eventId }))
+    const restarted = new RevocationService(agent as never, new CredentialLifecycleStore(join(directory, 'lifecycle.json')), webhook)
+    expect(await restarted.suspend({ credentialExchangeId: 'exchange-1' })).toEqual(first)
+    expect((await restarted.reactivate({ credentialExchangeId: 'exchange-1' })).revision).toBe(2)
+    expect(agent.modules.anoncreds.updateRevocationStatusList).toHaveBeenCalledTimes(2)
   })
 
   it('does not change local state when the ledger update fails', async () => {

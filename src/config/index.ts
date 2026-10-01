@@ -88,6 +88,7 @@ export const config = {
       'dev-verification-result-token-secret',
     ),
     trustedCredentialDefinitionIds: parseCsv('VERIFIER_TRUSTED_CREDENTIAL_DEFINITION_IDS'),
+    legacyValidityDefinitionIds: parseCsv('CREDENTIAL_VALIDITY_LEGACY_DEFINITION_IDS'),
     storeFile: requireEnv('VERIFICATION_STORE_FILE', join(homedir(), '.afj', 'verification-requests.json')),
     publicBaseUrl: withoutTrailingSlash(requireEnv('VERIFICATION_PUBLIC_BASE_URL', 'http://localhost:3000')),
     sessionTtlMinutes: parsePositiveInteger('VERIFICATION_SESSION_TTL_MINUTES', 5),

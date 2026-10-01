@@ -9,6 +9,8 @@ import type {
   VerificationFailureCode,
 } from './verificationTypes'
 
+import { credentialValidityFailure } from './credentialValidity'
+
 export type VerificationDecisionInput = {
   state: string
   isVerified?: boolean
@@ -17,6 +19,8 @@ export type VerificationDecisionInput = {
   requiredAttributes: string[]
   attributes?: Partial<RevealedVerificationAttributes>
   expired?: boolean
+  now?: number
+  legacyValidityAllowed?: boolean
   errorMessage?: string
 }
 
@@ -100,5 +104,7 @@ export function evaluateVerification(input: VerificationDecisionInput): Verifica
     return { decision: 'Declined', failureCode: 'REQUIRED_ATTRIBUTE_MISSING' }
   }
 
+  const failureCode = credentialValidityFailure(attributes, input.now ?? Date.now(), input.legacyValidityAllowed)
+  if (failureCode) return { decision: 'Declined', failureCode }
   return { decision: 'Approved', attributes: attributes as RevealedVerificationAttributes }
 }
