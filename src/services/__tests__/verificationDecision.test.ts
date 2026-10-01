@@ -4,9 +4,12 @@ const attributes = {
   studentNumber: 'VOSCAL100',
   faculty: 'Commerce',
   year: '2026',
+  validFrom: '2026-01-01T00:00:00Z',
+  expiresAt: '2027-01-01T00:00:00Z',
 }
 
 const validInput = {
+  now: Date.parse('2026-10-01T00:00:00Z'),
   state: 'done',
   isVerified: true,
   credentialDefinitionIds: ['cred-def-001'],

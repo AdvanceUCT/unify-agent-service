@@ -30,6 +30,7 @@ type AnonCredsPresentation = {
     revealed_attr_groups?: Record<
       string,
       {
+        sub_proof_index?: number
         values?: Record<string, { raw?: string; encoded?: string }>
       }
     >
@@ -74,6 +75,7 @@ type VerificationServiceOptions = {
   now?: () => Date
   rateLimiter?: VerificationRateLimiter
   trustedCredentialDefinitionIds?: string[]
+  legacyValidityDefinitionIds?: string[]
   sessionTtlMinutes?: number
   resultVisibilityMinutes?: number
   maxPendingPerServicePoint?: number
@@ -100,6 +102,7 @@ export class VerificationService {
   private readonly now: () => Date
   private readonly rateLimiter: VerificationRateLimiter
   private readonly trustedCredentialDefinitionIds: string[]
+  private readonly legacyValidityDefinitionIds: string[]
   private readonly sessionTtlMinutes: number
   private readonly resultVisibilityMinutes: number
   private readonly maxPendingPerServicePoint: number
@@ -112,6 +115,7 @@ export class VerificationService {
     options: VerificationServiceOptions = {},
   ) {
     this.now = options.now ?? (() => new Date())
+    this.legacyValidityDefinitionIds = options.legacyValidityDefinitionIds ?? config.verifier.legacyValidityDefinitionIds
     this.trustedCredentialDefinitionIds =
       options.trustedCredentialDefinitionIds ?? config.verifier.trustedCredentialDefinitionIds
     this.sessionTtlMinutes = options.sessionTtlMinutes ?? config.verifier.sessionTtlMinutes
@@ -559,13 +563,15 @@ export class VerificationService {
     const awaitingClaim = session.mode === 'CHECKOUT' && !session.proofRecordId && !expired
     const proofRecordMissing = !proofRecord && !expired && !awaitingClaim
 
-    const evaluation = evaluateVerification({
+    const evaluation = isTerminal(session.decision) ? { decision: session.decision, failureCode: session.failureCode, attributes: attributes as RevealedVerificationAttributes | undefined } : evaluateVerification({
       state: proofRecordMissing ? 'abandoned' : proofRecord?.state ?? session.state,
       isVerified: proofRecord?.isVerified ?? session.isVerified,
       errorMessage: proofRecordMissing ? 'Credo proof record is missing.' : proofRecord?.errorMessage,
       credentialDefinitionIds,
       trustedCredentialDefinitionIds: [credentialDefinitionId],
-      requiredAttributes: requestedAttributes,
+      requiredAttributes: requestedAttributes.filter(name => name !== 'validFrom' && name !== 'expiresAt'),
+      now: this.now().getTime(),
+      legacyValidityAllowed: this.legacyValidityDefinitionIds.includes(credentialDefinitionId) && !policy.attributes.includes('validFrom') && !policy.attributes.includes('expiresAt'),
       attributes,
       expired,
     })
@@ -577,7 +583,7 @@ export class VerificationService {
       ? addMinutes(terminalAt, this.resultVisibilityMinutes).toISOString()
       : session.detailsVisibleUntil
 
-    const updated = await this.store.updateSession(session.verificationRequestId, (record) => ({
+    const updated = await this.store.updateSession(session.verificationRequestId, (record) => isTerminal(record.decision) ? record : ({
       ...record,
       state: proofRecord?.state ?? record.state,
       decision: evaluation.decision,
@@ -641,9 +647,12 @@ export class VerificationService {
       if (!presentation) return { credentialDefinitionIds: [] }
 
       const attributes: Partial<RevealedVerificationAttributes> = {}
-      const group = presentation.requested_proof?.revealed_attr_groups?.student_details?.values
+      const revealedGroup = presentation.requested_proof?.revealed_attr_groups?.student_details
+      const index = revealedGroup?.sub_proof_index
+      if (!Number.isInteger(index) || !presentation.identifiers?.[index!]?.cred_def_id) return { credentialDefinitionIds: [] }
+      const group = revealedGroup?.values
       if (group) {
-        for (const name of requestedAttributes) {
+        for (const name of [...new Set([...requestedAttributes, 'validFrom', 'expiresAt'])]) {
           const raw = group[name]?.raw
           if (typeof raw === 'string') attributes[name] = raw
         }
@@ -651,13 +660,7 @@ export class VerificationService {
 
       return {
         attributes,
-        credentialDefinitionIds: [
-          ...new Set(
-            (presentation.identifiers ?? [])
-              .map((identifier) => identifier.cred_def_id)
-              .filter((id): id is string => typeof id === 'string' && id.length > 0),
-          ),
-        ],
+        credentialDefinitionIds: [presentation.identifiers![index!].cred_def_id!],
       }
     } catch (error) {
       throw new AppError(
@@ -888,7 +891,8 @@ export class VerificationService {
         updatedAt: this.now().toISOString(),
       }))
     }
-    return policy
+    const legacy = this.legacyValidityDefinitionIds.includes(policy.credentialDefinitionId) && !policy.attributes.includes('validFrom') && !policy.attributes.includes('expiresAt')
+    return { ...policy, attributes: legacy ? policy.attributes : [...new Set([...policy.attributes, 'validFrom', 'expiresAt'])] }
   }
 
   /**

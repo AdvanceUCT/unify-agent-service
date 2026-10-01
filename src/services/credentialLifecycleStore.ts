@@ -16,6 +16,9 @@ export type CredentialLifecycleRecord = {
   credentialRevocationId: string
   revocationRegistryDefinitionId: string
   status: CredentialLifecycleStatus
+  previousStatus?: CredentialLifecycleStatus
+  revision?: number
+  eventId?: string
   statusListTimestamp?: number
   reason?: string
   suspendedAt?: string
@@ -74,7 +77,18 @@ export class CredentialLifecycleStore {
     try {
       const parsed = JSON.parse(raw) as Partial<CredentialLifecycleStoreFile>
       if (!Array.isArray(parsed.credentials)) throw new Error('Expected a credentials array.')
-      return parsed.credentials
+      let migrated = false
+      const credentials = parsed.credentials.map(record => {
+        if (record.revision !== undefined && (!Number.isSafeInteger(record.revision) || record.revision < 0)) throw new Error('Invalid lifecycle revision.')
+        if (record.revision === undefined || !record.eventId) {
+          migrated = true
+          return { ...record, revision: record.revision ?? 0, eventId: record.eventId || `lifecycle-baseline:${record.credentialExchangeId}` }
+        }
+        if (!Number.isSafeInteger(record.revision) || record.revision < 0) throw new Error('Invalid lifecycle revision.')
+        return record
+      })
+      if (migrated) await this.writeAll(credentials)
+      return credentials
     } catch (error) {
       throw new AppError(
         500,

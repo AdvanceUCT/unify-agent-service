@@ -14,6 +14,12 @@ import { AppError } from '../../errors'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalString, requireAttributes, requireObject, requireString } from '../validation'
 
+function expectedRevision(body: Record<string, unknown>): number | undefined {
+  if (body.expectedRevision === undefined) return undefined
+  if (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 0) throw new AppError(400, 'expectedRevision must be a nonnegative safe integer.')
+  return Number(body.expectedRevision)
+}
+
 function withRevocationRegistryDefinitionId<T extends object>(
   input: T,
   revocationRegistryDefinitionId?: string,
@@ -183,6 +189,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       const result = await revocations.suspend({
         credentialExchangeId: req.params.id,
         reason: optionalString(body, 'reason'),
+        expectedRevision: expectedRevision(body),
       })
       res.json(result)
     })
@@ -195,6 +202,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       const result = await revocations.reactivate({
         credentialExchangeId: req.params.id,
         reason: optionalString(body, 'reason'),
+        expectedRevision: expectedRevision(body),
       })
       res.json(result)
     })
@@ -214,6 +222,7 @@ export function buildCredentialsRouter(agent: UniversityAgent): Router {
       const result = await revocations.revoke({
         credentialExchangeId: req.params.id,
         reason: optionalString(body, 'reason'),
+        expectedRevision: expectedRevision(body),
       })
       res.json(result)
     })

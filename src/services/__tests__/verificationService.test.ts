@@ -56,7 +56,7 @@ function makeAgent() {
           anoncreds: {
             requested_proof: {
               revealed_attr_groups: {
-                student_details: { values: revealedAttributes },
+                student_details: { sub_proof_index: 0, values: revealedAttributes },
               },
             },
             identifiers: [{ cred_def_id: 'cred-def-001' }],
@@ -100,6 +100,7 @@ describe('VerificationService', () => {
     return new VerificationService(agent as never, store, {
       now: () => now,
       trustedCredentialDefinitionIds: ['cred-def-001'],
+      legacyValidityDefinitionIds: ['cred-def-001', 'cred-def-002'],
       resultTokenSecret: 'test-result-token-secret',
       rateLimiter: new VerificationRateLimiter({ perIp: 100, perServicePoint: 100 }),
       ...overrides,
@@ -581,6 +582,29 @@ describe('VerificationService', () => {
     })
     expect(status).not.toHaveProperty('proofRecordId')
     expect(status).not.toHaveProperty('vendorId')
+  })
+
+  it.each([['2026-06-23T10:00:00Z', 'Declined', 'CREDENTIAL_EXPIRED'], ['2026-06-23T10:01:00Z', 'Approved', undefined]])('enforces signed expiry %s on a fresh modern proof and freezes the terminal decision', async (expiresAt, status, failureCode) => {
+    const state = makeAgent()
+    state.agent.modules.anoncreds.getSchema.mockResolvedValue({ schema: { attrNames: ['studentNumber', 'faculty', 'year', 'validFrom', 'expiresAt'], name: 'ModernStudent', version: '2.0' } })
+    state.agent.proofs.getFormatData.mockResolvedValue({ presentation: { anoncreds: { requested_proof: { revealed_attr_groups: { student_details: { sub_proof_index: 0, values: { ...revealedAttributes, validFrom: { raw: '2026-01-01T00:00:00Z', encoded: '4' }, expiresAt: { raw: expiresAt, encoded: '5' } } } } }, identifiers: [{ cred_def_id: 'cred-def-001' }] } } } as never)
+    const service = serviceFor(state.agent, { legacyValidityDefinitionIds: [] })
+    const point = await registeredPoint(service)
+    const started = await service.startSession({ publicServicePointId: point.publicId, clientRequestId: 'modern', requestIp: '192.0.2.1' })
+    state.setProofRecord({ state: 'done', isVerified: true })
+    expect(await service.getStatus(started.verificationRequestId)).toMatchObject({ status, ...(failureCode ? { failureCode } : {}) })
+    now = new Date('2026-06-23T10:02:00Z')
+    expect(await service.getStatus(started.verificationRequestId)).toMatchObject({ status, ...(failureCode ? { failureCode } : {}) })
+  })
+
+  it('binds disclosed attributes to their own verified sub-proof definition', async () => {
+    const state = makeAgent()
+    state.agent.proofs.getFormatData.mockResolvedValue({ presentation: { anoncreds: { requested_proof: { revealed_attr_groups: { student_details: { sub_proof_index: 1, values: revealedAttributes } } }, identifiers: [{ cred_def_id: 'cred-def-001' }, { cred_def_id: 'untrusted' }] } } })
+    const service = serviceFor(state.agent)
+    const point = await registeredPoint(service)
+    const started = await service.startSession({ publicServicePointId: point.publicId, clientRequestId: 'mixed', requestIp: '192.0.2.1' })
+    state.setProofRecord({ state: 'done', isVerified: true })
+    expect(await service.getStatus(started.verificationRequestId)).toMatchObject({ status: 'Declined', failureCode: 'UNTRUSTED_CREDENTIAL_DEFINITION' })
   })
 
   it('reports a missing Credo proof record as a protocol failure', async () => {

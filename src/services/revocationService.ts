@@ -40,27 +40,33 @@ export class RevocationService {
   ) {}
 
   async getLifecycle(credentialExchangeId: string): Promise<CredentialLifecycleResult> {
+    return this.withLock(() => this.lifecycleSnapshot(credentialExchangeId))
+  }
+
+  private async lifecycleSnapshot(credentialExchangeId: string): Promise<CredentialLifecycleResult> {
     const existing = await this.store.findByCredentialExchangeId(credentialExchangeId)
     if (existing) return existing
 
     const metadata = await requireCredentialRevocationMetadata(this.agent, credentialExchangeId)
-    return {
+    return this.store.save({
       credentialExchangeId,
       ...metadata,
       status: 'ACTIVE',
+      revision: 0,
+      eventId: `lifecycle-baseline:${credentialExchangeId}`,
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
-  async suspend(params: { credentialExchangeId: string; reason?: string }): Promise<CredentialLifecycleResult> {
+  async suspend(params: { credentialExchangeId: string; reason?: string; expectedRevision?: number }): Promise<CredentialLifecycleResult> {
     return this.withLock(() => this.changeLifecycle('suspend', params))
   }
 
-  async reactivate(params: { credentialExchangeId: string; reason?: string }): Promise<CredentialLifecycleResult> {
+  async reactivate(params: { credentialExchangeId: string; reason?: string; expectedRevision?: number }): Promise<CredentialLifecycleResult> {
     return this.withLock(() => this.changeLifecycle('reactivate', params))
   }
 
-  async revoke(params: { credentialExchangeId: string; reason?: string }): Promise<CredentialLifecycleResult> {
+  async revoke(params: { credentialExchangeId: string; reason?: string; expectedRevision?: number }): Promise<CredentialLifecycleResult> {
     return this.withLock(() => this.changeLifecycle('revoke', params))
   }
 
@@ -75,12 +81,13 @@ export class RevocationService {
 
   private async changeLifecycle(
     operation: LifecycleOperation,
-    params: { credentialExchangeId: string; reason?: string },
+    params: { credentialExchangeId: string; reason?: string; expectedRevision?: number },
   ): Promise<CredentialLifecycleResult> {
     const existing = await this.store.findByCredentialExchangeId(params.credentialExchangeId)
     const metadata = existing ?? (await requireCredentialRevocationMetadata(this.agent, params.credentialExchangeId))
     const previousStatus: CredentialLifecycleStatus = existing?.status ?? 'ACTIVE'
 
+    if (params.expectedRevision !== undefined && params.expectedRevision !== (existing?.revision ?? 0)) throw new AppError(409, 'Credential lifecycle changed before the scheduled operation.', undefined, 'LIFECYCLE_REVISION_CONFLICT')
     const idempotent = this.idempotentResult(operation, existing)
     if (idempotent) return idempotent
     this.assertTransition(operation, previousStatus, existing)
@@ -96,10 +103,16 @@ export class RevocationService {
       })
     }
 
+    const eventId = randomUUID()
+    const revision = (existing?.revision ?? 0) + 1
+    if (!Number.isSafeInteger(revision)) throw new AppError(500, 'Lifecycle revision exhausted.')
     const timestamp = new Date().toISOString()
     const status: CredentialLifecycleStatus = operation === 'reactivate' ? 'ACTIVE' : operation === 'suspend' ? 'SUSPENDED' : 'REVOKED'
     const record: CredentialLifecycleRecord = {
       ...existing,
+      revision,
+      previousStatus,
+      eventId,
       credentialExchangeId: params.credentialExchangeId,
       credentialRevocationId: metadata.credentialRevocationId,
       revocationRegistryDefinitionId: metadata.revocationRegistryDefinitionId,
@@ -115,11 +128,11 @@ export class RevocationService {
     // The ledger update succeeds before local persistence, and local persistence succeeds
     // before the webhook, so the portal is never told about an uncommitted lifecycle state.
     await this.store.save(record)
-    const eventId = randomUUID()
     await this.webhookDispatcher({
       credentialExchangeId: record.credentialExchangeId,
       credentialRevocationId: record.credentialRevocationId,
       eventId,
+      revision,
       previousStatus,
       reason: record.reason,
       revocationRegistryDefinitionId: record.revocationRegistryDefinitionId,

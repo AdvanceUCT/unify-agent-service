@@ -8,6 +8,9 @@ export type VerificationDecision = 'Pending' | 'Approved' | 'Declined' | 'Expire
 export type VerificationFailureCode =
   | 'CREDO_PROTOCOL_ERROR'
   | 'CREDENTIAL_NOT_CURRENT'
+  | 'CREDENTIAL_EXPIRED'
+  | 'CREDENTIAL_NOT_YET_VALID'
+  | 'CREDENTIAL_VALIDITY_INVALID'
   | 'PROOF_EXCHANGE_ABANDONED'
   | 'PROOF_NOT_VERIFIED'
   | 'PROOF_REQUEST_EXPIRED'

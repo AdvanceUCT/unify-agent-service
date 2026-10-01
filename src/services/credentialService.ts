@@ -258,6 +258,7 @@ export class CredentialService {
   }
 
   async getStatus(_credentialExchangeId: string): Promise<{
+    credentialValidity: { validFrom?: string; expiresAt?: string }
     id: string
     state: string
     connectionId?: string
@@ -265,10 +266,13 @@ export class CredentialService {
     updatedAt: string
   }> {
     const record = await this.agent.credentials.getById(_credentialExchangeId)
+    const selected = record.credentialAttributes?.filter(attribute => ['validFrom', 'expiresAt'].includes(attribute.name)) ?? []
+    const credentialValidity = Object.fromEntries(selected.map(attribute => [attribute.name, attribute.value]))
 
     // Return our stable DTO shape, not the full Credo record.
     return {
       id: record.id,
+      credentialValidity,
       state: record.state,
       connectionId: record.connectionId,
       credentialDefinitionId: await this.getCredentialDefinitionId(record.id),
