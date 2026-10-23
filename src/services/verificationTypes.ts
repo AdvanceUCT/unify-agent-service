@@ -32,6 +32,16 @@ export type ServicePointRecord = {
   updatedAt: string
 }
 
+export type VendorSuspensionCode = 'UNPAID_INVOICE'
+
+/** Blocks new verifications at every service point owned by the vendor. */
+export type VendorSuspensionRecord = {
+  vendorId: string
+  code: VendorSuspensionCode
+  suspendedAt: string
+  updatedAt: string
+}
+
 export type VerificationSessionRecord = {
   verificationRequestId: string
   mode?: 'STATIC' | 'CHECKOUT'

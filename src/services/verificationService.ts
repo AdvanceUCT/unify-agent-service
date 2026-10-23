@@ -20,6 +20,8 @@ import {
   type ServicePointRecord,
   type TrustedCredentialDefinitionRecord,
   type MinimalVerificationResult,
+  type VendorSuspensionCode,
+  type VendorSuspensionRecord,
   type VerificationDecision,
   type VerificationFailureCode,
   type VerificationSessionRecord,
@@ -192,6 +194,28 @@ export class VerificationService {
     return this.withVerificationUrl(updated)
   }
 
+  async getVendorSuspension(vendorId: string): Promise<VendorSuspensionRecord | undefined> {
+    return this.store.findVendorSuspension(vendorId)
+  }
+
+  /** Records the portal's billing suspension; repeating it with the same input is harmless. */
+  async suspendVendor(
+    vendorId: string,
+    input: { code: VendorSuspensionCode; suspendedAt: string },
+  ): Promise<VendorSuspensionRecord> {
+    return this.store.upsertVendorSuspension({
+      vendorId,
+      code: input.code,
+      suspendedAt: input.suspendedAt,
+      updatedAt: this.now().toISOString(),
+    })
+  }
+
+  /** Lifts a vendor suspension; returns false when the vendor was not suspended. */
+  async reinstateVendor(vendorId: string): Promise<boolean> {
+    return this.store.deleteVendorSuspension(vendorId)
+  }
+
   /** Creates an unclaimed checkout capability without starting a Credo proof exchange yet. */
   async createCheckoutSession(input: {
     vendorId: string
@@ -209,6 +233,7 @@ export class VerificationService {
       if (!servicePoint || servicePoint.vendorId !== input.vendorId) {
         throw new AppError(404, 'Service point was not found.', undefined, 'SERVICE_POINT_NOT_FOUND')
       }
+      await this.assertVendorVerificationAllowed(servicePoint.vendorId)
       if (!servicePoint.active) {
         throw new AppError(410, 'Service point verification is disabled.', undefined, 'SERVICE_POINT_DISABLED')
       }
@@ -262,6 +287,7 @@ export class VerificationService {
     }
 
     const servicePoint = await this.getServicePoint(session.servicePointId)
+    await this.assertVendorVerificationAllowed(servicePoint.vendorId)
     if (!servicePoint.active) {
       throw new AppError(410, 'Service point verification is disabled.', undefined, 'SERVICE_POINT_DISABLED')
     }
@@ -329,6 +355,7 @@ export class VerificationService {
       if (!servicePoint) {
         throw new AppError(404, 'Service point was not found.', undefined, 'SERVICE_POINT_NOT_FOUND')
       }
+      await this.assertVendorVerificationAllowed(servicePoint.vendorId)
       if (!servicePoint.active) {
         throw new AppError(410, 'Service point verification is disabled.', undefined, 'SERVICE_POINT_DISABLED')
       }
@@ -402,6 +429,14 @@ export class VerificationService {
       await this.store.insertSession(session)
       return this.startResponse(session, servicePoint, outOfBandRecord)
     })
+  }
+
+  // Only new sessions and checkout claims are refused; proof exchanges that were already
+  // underway when the vendor was suspended are allowed to finish.
+  private async assertVendorVerificationAllowed(vendorId: string): Promise<void> {
+    if (await this.store.findVendorSuspension(vendorId)) {
+      throw new AppError(403, 'Vendor verification is suspended.', undefined, 'VENDOR_VERIFICATION_SUSPENDED')
+    }
   }
 
   /** Returns the capability-protected minimal result used by the presenting wallet. */

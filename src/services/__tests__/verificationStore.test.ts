@@ -126,6 +126,40 @@ describe('VerificationStore', () => {
     expect(await store.findSessionById('verification-2')).toMatchObject({ decision: 'Pending' })
   })
 
+  it('loads a store written before vendor suspensions existed', async () => {
+    await writeFile(filePath, JSON.stringify({ servicePoints: [servicePoint(1)], sessions: [] }))
+    const store = new VerificationStore(filePath)
+
+    await expect(store.findVendorSuspension('vendor-001')).resolves.toBeUndefined()
+    await store.upsertVendorSuspension({
+      vendorId: 'vendor-001',
+      code: 'UNPAID_INVOICE',
+      suspendedAt: '2026-06-23T09:00:00.000Z',
+      updatedAt: '2026-06-23T10:00:00.000Z',
+    })
+
+    const reopened = new VerificationStore(filePath)
+    await expect(reopened.findVendorSuspension('vendor-001')).resolves.toMatchObject({ code: 'UNPAID_INVOICE' })
+    await expect(reopened.listServicePoints()).resolves.toHaveLength(1)
+  })
+
+  it('keeps one suspension per vendor and removes it on reinstatement', async () => {
+    const store = new VerificationStore(filePath)
+    const record = {
+      vendorId: 'vendor-001',
+      code: 'UNPAID_INVOICE' as const,
+      suspendedAt: '2026-06-23T09:00:00.000Z',
+      updatedAt: '2026-06-23T10:00:00.000Z',
+    }
+    await store.upsertVendorSuspension(record)
+    await store.upsertVendorSuspension({ ...record, updatedAt: '2026-06-24T10:00:00.000Z' })
+
+    const raw = JSON.parse(await readFile(filePath, 'utf8')) as { vendorSuspensions: unknown[] }
+    expect(raw.vendorSuspensions).toHaveLength(1)
+    await expect(store.deleteVendorSuspension('vendor-001')).resolves.toBe(true)
+    await expect(store.deleteVendorSuspension('vendor-001')).resolves.toBe(false)
+  })
+
   it('reports corrupt persistence separately from protocol errors', async () => {
     await writeFile(filePath, '{not-json')
     const store = new VerificationStore(filePath)

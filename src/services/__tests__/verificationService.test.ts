@@ -304,6 +304,126 @@ describe('VerificationService', () => {
     expect(agent.proofs.createRequest).not.toHaveBeenCalled()
   })
 
+  describe('vendor suspension', () => {
+    const suspension = { code: 'UNPAID_INVOICE' as const, suspendedAt: '2026-06-23T09:00:00.000Z' }
+
+    it('blocks static sessions at every service point owned by a suspended vendor', async () => {
+      const { agent } = makeAgent()
+      const service = serviceFor(agent)
+      const first = await registeredPoint(service)
+      const second = await service.createServicePoint({
+        vendorId: 'vendor-001',
+        vendorName: 'Library Cafe',
+        externalId: 'side-counter',
+        name: 'Side Counter',
+      })
+      await service.suspendVendor('vendor-001', suspension)
+
+      for (const point of [first, second]) {
+        await expect(
+          service.startSession({
+            publicServicePointId: point.publicId,
+            clientRequestId: `client-${point.id}`,
+            requestIp: '192.0.2.1',
+          }),
+        ).rejects.toMatchObject({ status: 403, code: 'VENDOR_VERIFICATION_SUSPENDED' })
+      }
+      expect(agent.proofs.createRequest).not.toHaveBeenCalled()
+    })
+
+    it('reports the suspension ahead of a disabled service point', async () => {
+      const { agent } = makeAgent()
+      const service = serviceFor(agent)
+      const point = await registeredPoint(service)
+      await service.updateServicePoint(point.id, { active: false })
+      await service.suspendVendor('vendor-001', suspension)
+
+      await expect(
+        service.startSession({
+          publicServicePointId: point.publicId,
+          clientRequestId: 'client-001',
+          requestIp: '192.0.2.1',
+        }),
+      ).rejects.toMatchObject({ code: 'VENDOR_VERIFICATION_SUSPENDED' })
+    })
+
+    it('blocks checkout creation and unclaimed checkout claims', async () => {
+      const { agent } = makeAgent()
+      const service = serviceFor(agent)
+      const point = await registeredPoint(service)
+      const checkout = await service.createCheckoutSession({
+        vendorId: 'vendor-001',
+        servicePointId: point.id,
+        checkoutId: 'cart-001',
+      })
+      const claimToken = new URL(checkout.verificationUrl).searchParams.get('token') as string
+      await service.suspendVendor('vendor-001', suspension)
+
+      await expect(
+        service.createCheckoutSession({ vendorId: 'vendor-001', servicePointId: point.id, checkoutId: 'cart-002' }),
+      ).rejects.toMatchObject({ status: 403, code: 'VENDOR_VERIFICATION_SUSPENDED' })
+      await expect(
+        service.claimCheckoutSession({ verificationRequestId: checkout.verificationRequestId, claimToken }),
+      ).rejects.toMatchObject({ status: 403, code: 'VENDOR_VERIFICATION_SUSPENDED' })
+      expect(agent.proofs.createRequest).not.toHaveBeenCalled()
+    })
+
+    it('does not affect other vendors', async () => {
+      const { agent } = makeAgent()
+      const service = serviceFor(agent)
+      const point = await registeredPoint(service)
+      await service.suspendVendor('vendor-002', suspension)
+
+      await expect(
+        service.startSession({
+          publicServicePointId: point.publicId,
+          clientRequestId: 'client-001',
+          requestIp: '192.0.2.1',
+        }),
+      ).resolves.toMatchObject({ vendorName: 'Library Cafe' })
+    })
+
+    it('lets a proof exchange that started before the suspension finish', async () => {
+      const agentState = makeAgent()
+      const service = serviceFor(agentState.agent)
+      const point = await registeredPoint(service)
+      const started = await service.startSession({
+        publicServicePointId: point.publicId,
+        clientRequestId: 'client-001',
+        requestIp: '192.0.2.1',
+      })
+      await service.suspendVendor('vendor-001', suspension)
+      agentState.setProofRecord({ state: 'done', isVerified: true })
+
+      await expect(
+        service.getWalletResult(started.verificationRequestId, started.resultToken),
+      ).resolves.toMatchObject({ status: 'Approved' })
+    })
+
+    it('stores suspensions idempotently and restores access on reinstatement', async () => {
+      const { agent } = makeAgent()
+      const service = serviceFor(agent)
+      const point = await registeredPoint(service)
+      await service.suspendVendor('vendor-001', suspension)
+      await service.suspendVendor('vendor-001', suspension)
+
+      expect(await service.getVendorSuspension('vendor-001')).toMatchObject({
+        vendorId: 'vendor-001',
+        ...suspension,
+      })
+      expect(await service.reinstateVendor('vendor-001')).toBe(true)
+      expect(await service.reinstateVendor('vendor-001')).toBe(false)
+      expect(await service.getVendorSuspension('vendor-001')).toBeUndefined()
+      await expect(
+        service.startSession({
+          publicServicePointId: point.publicId,
+          clientRequestId: 'client-001',
+          requestIp: '192.0.2.1',
+        }),
+      ).resolves.toMatchObject({ vendorName: 'Library Cafe' })
+    })
+  })
+
   it('requests every attribute from the selected schema version', async () => {
     const { agent } = makeAgent()
     agent.modules.anoncreds.getCredentialDefinition.mockResolvedValueOnce({

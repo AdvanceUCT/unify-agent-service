@@ -1,6 +1,6 @@
 /**
  * @fileoverview Defines administrator and vendor endpoints for service points, trust policy,
- * proof sessions, checkout claims, and verification results.
+ * vendor suspensions, proof sessions, checkout claims, and verification results.
  * @module api/routes/verifier
  */
 
@@ -9,6 +9,7 @@ import { Router } from 'express'
 import type { UniversityAgent } from '../../agent'
 import { AppError } from '../../errors'
 import { VerificationService } from '../../services/verificationService'
+import type { VendorSuspensionCode } from '../../services/verificationTypes'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { optionalBoolean, optionalString, requireObject, requireString } from '../validation'
 
@@ -19,12 +20,34 @@ type VerifierRouteService = Pick<
   | 'getServicePoint'
   | 'getInPersonDetails'
   | 'getResult'
+  | 'getVendorSuspension'
   | 'listServicePoints'
   | 'listSessions'
   | 'listTrustedCredentialDefinitions'
   | 'registerTrustedCredentialDefinition'
+  | 'reinstateVendor'
+  | 'suspendVendor'
   | 'updateServicePoint'
 >
+
+const VENDOR_SUSPENSION_CODES: readonly VendorSuspensionCode[] = ['UNPAID_INVOICE']
+
+function requireSuspensionCode(body: Record<string, unknown>): VendorSuspensionCode {
+  const code = requireString(body, 'code')
+  if (!VENDOR_SUSPENSION_CODES.includes(code as VendorSuspensionCode)) {
+    throw new AppError(400, `code must be one of: ${VENDOR_SUSPENSION_CODES.join(', ')}.`)
+  }
+  return code as VendorSuspensionCode
+}
+
+function requireTimestamp(body: Record<string, unknown>, key: string): string {
+  const value = requireString(body, key)
+  const timestamp = new Date(value)
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new AppError(400, `${key} must be an ISO 8601 timestamp.`)
+  }
+  return timestamp.toISOString()
+}
 
 /** Builds the privileged verifier-management and vendor result routes. */
 export function buildVerifierRouter(
@@ -126,6 +149,34 @@ export function buildVerifierRouter(
           credentialDefinitionId,
         }),
       )
+    }),
+  )
+
+  router.get(
+    '/vendors/:vendorId/suspension',
+    asyncHandler(async (req, res) => {
+      const suspension = await verifier.getVendorSuspension(req.params.vendorId)
+      res.json({ vendorId: req.params.vendorId, suspended: Boolean(suspension), suspension: suspension ?? null })
+    }),
+  )
+
+  router.put(
+    '/vendors/:vendorId/suspension',
+    asyncHandler(async (req, res) => {
+      const body = requireObject(req.body)
+      const suspension = await verifier.suspendVendor(req.params.vendorId, {
+        code: requireSuspensionCode(body),
+        suspendedAt: requireTimestamp(body, 'suspendedAt'),
+      })
+      res.json({ vendorId: req.params.vendorId, suspended: true, suspension })
+    }),
+  )
+
+  router.delete(
+    '/vendors/:vendorId/suspension',
+    asyncHandler(async (req, res) => {
+      await verifier.reinstateVendor(req.params.vendorId)
+      res.json({ vendorId: req.params.vendorId, suspended: false, suspension: null })
     }),
   )
 

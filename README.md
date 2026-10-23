@@ -259,6 +259,7 @@ Except for the public routes listed earlier, these endpoints require the agent b
 | `GET/POST /api/verifier/service-points` | List or create vendor service points |
 | `GET/PATCH /api/verifier/service-points/:id` | Read, rename, reconfigure, activate, or deactivate a service point |
 | `GET /api/verifier/service-points/:id/sessions` | List recent bounded verification status for a service point |
+| `GET/PUT/DELETE /api/verifier/vendors/:vendorId/suspension` | Read, set, or lift a vendor-wide verification suspension |
 | `POST /api/verifier/checkout-sessions` | Create an unclaimed checkout-bound verification request |
 | `GET /api/verifier/proof-requests/:id` | Protected authoritative result/status |
 | `GET /api/verifier/proof-requests/:id/details` | Protected short-lived in-person result attributes |
@@ -312,6 +313,12 @@ The static QR identifies the service point only. It never contains reusable proo
 6. Vendor-facing results remain minimal: request/checkout identifiers, status, failure code, and timestamps.
 
 Expired, malformed, mismatched, or reused claims are rejected. A checkout session cannot be used as an unclaimed static verification request.
+
+### Vendor suspension
+
+The Admin Portal suspends a vendor's verifications when an invoice stays unpaid past its due date. `PUT /api/verifier/vendors/:vendorId/suspension` with `{ "code": "UNPAID_INVOICE", "suspendedAt": "<ISO timestamp>" }` records the suspension, and `DELETE` on the same path lifts it. Both calls are idempotent so the portal can safely retry them.
+
+While a vendor is suspended, every service point carrying that `vendorId` refuses new static sessions, checkout session creation, and checkout claims with `403 VENDOR_VERIFICATION_SUSPENDED`. This check runs before the service point's own `active` flag, so the wallet can explain that the vendor, not the student or UNIFY, is the reason. Proof exchanges that started before the suspension are allowed to finish.
 
 ### Decision rules
 

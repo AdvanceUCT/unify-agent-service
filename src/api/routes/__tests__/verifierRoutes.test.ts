@@ -43,6 +43,13 @@ function verifierServiceMock() {
     getResult: jest.fn().mockResolvedValue({ verificationRequestId: 'verification-001', status: 'Pending' }),
     listTrustedCredentialDefinitions: jest.fn().mockResolvedValue([]),
     registerTrustedCredentialDefinition: jest.fn().mockResolvedValue({ credentialDefinitionId: 'cred-def-001' }),
+    getVendorSuspension: jest.fn().mockResolvedValue(undefined),
+    suspendVendor: jest.fn().mockImplementation(async (vendorId: string, input: object) => ({
+      vendorId,
+      ...input,
+      updatedAt: '2026-06-23T10:00:00.000Z',
+    })),
+    reinstateVendor: jest.fn().mockResolvedValue(true),
   }
 }
 
@@ -174,6 +181,63 @@ describe('verifier routes', () => {
         credentialDefinitionId: 'cred-def-002',
         makeDefault: true,
       })
+    })
+  })
+})
+
+describe('vendor suspension routes', () => {
+  it('suspends a vendor with a normalized timestamp', async () => {
+    const service = verifierServiceMock()
+    const router = buildVerifierRouter({} as never, service as never)
+
+    await withServer(router, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/vendors/vendor-001/suspension`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'UNPAID_INVOICE', suspendedAt: '2026-06-23T11:00:00+02:00' }),
+      })
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ vendorId: 'vendor-001', suspended: true })
+      expect(service.suspendVendor).toHaveBeenCalledWith('vendor-001', {
+        code: 'UNPAID_INVOICE',
+        suspendedAt: '2026-06-23T09:00:00.000Z',
+      })
+    })
+  })
+
+  it.each([
+    [{ code: 'OTHER', suspendedAt: '2026-06-23T09:00:00.000Z' }],
+    [{ code: 'UNPAID_INVOICE', suspendedAt: 'yesterday' }],
+    [{ code: 'UNPAID_INVOICE' }],
+  ])('rejects an invalid suspension body %j', async (body) => {
+    const service = verifierServiceMock()
+    const router = buildVerifierRouter({} as never, service as never)
+
+    await withServer(router, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/vendors/vendor-001/suspension`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      expect(response.status).toBe(400)
+      expect(service.suspendVendor).not.toHaveBeenCalled()
+    })
+  })
+
+  it('reinstates idempotently and reports the current state', async () => {
+    const service = verifierServiceMock()
+    service.reinstateVendor.mockResolvedValue(false)
+    const router = buildVerifierRouter({} as never, service as never)
+
+    await withServer(router, async (baseUrl) => {
+      const removed = await fetch(`${baseUrl}/vendors/vendor-001/suspension`, { method: 'DELETE' })
+      const current = await fetch(`${baseUrl}/vendors/vendor-001/suspension`)
+
+      expect(removed.status).toBe(200)
+      expect(await removed.json()).toEqual({ vendorId: 'vendor-001', suspended: false, suspension: null })
+      expect(await current.json()).toEqual({ vendorId: 'vendor-001', suspended: false, suspension: null })
     })
   })
 })
