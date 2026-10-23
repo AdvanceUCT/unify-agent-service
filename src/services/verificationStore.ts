@@ -1,5 +1,5 @@
 /**
- * @fileoverview Persists service points, trusted definitions, and verification sessions in the
+ * @fileoverview Persists service points, trusted definitions, vendor suspensions, and verification sessions in the
  * agent data volume with serialized, atomic updates.
  * @module services/verificationStore
  */
@@ -14,6 +14,7 @@ import { AppError } from '../errors'
 import type {
   ServicePointRecord,
   TrustedCredentialDefinitionRecord,
+  VendorSuspensionRecord,
   VerificationSessionRecord,
 } from './verificationTypes'
 
@@ -21,12 +22,14 @@ type VerificationStoreFile = {
   servicePoints: ServicePointRecord[]
   sessions: VerificationSessionRecord[]
   trustedCredentialDefinitions: TrustedCredentialDefinitionRecord[]
+  vendorSuspensions: VendorSuspensionRecord[]
 }
 
 const EMPTY_STORE: VerificationStoreFile = {
   servicePoints: [],
   sessions: [],
   trustedCredentialDefinitions: [],
+  vendorSuspensions: [],
 }
 
 /**
@@ -157,6 +160,37 @@ export class VerificationStore {
     })
   }
 
+  async findVendorSuspension(vendorId: string): Promise<VendorSuspensionRecord | undefined> {
+    return this.withLock(async () =>
+      (await this.readState()).vendorSuspensions.find((item) => item.vendorId === vendorId),
+    )
+  }
+
+  /** Creates or replaces the vendor's suspension so repeated portal syncs are idempotent. */
+  async upsertVendorSuspension(record: VendorSuspensionRecord): Promise<VendorSuspensionRecord> {
+    return this.withLock(async () => {
+      const state = await this.readState()
+      state.vendorSuspensions = [
+        ...state.vendorSuspensions.filter((item) => item.vendorId !== record.vendorId),
+        record,
+      ]
+      await this.writeState(state)
+      return record
+    })
+  }
+
+  async deleteVendorSuspension(vendorId: string): Promise<boolean> {
+    return this.withLock(async () => {
+      const state = await this.readState()
+      const remaining = state.vendorSuspensions.filter((item) => item.vendorId !== vendorId)
+      if (remaining.length === state.vendorSuspensions.length) return false
+
+      state.vendorSuspensions = remaining
+      await this.writeState(state)
+      return true
+    })
+  }
+
   async insertSession(record: VerificationSessionRecord): Promise<VerificationSessionRecord> {
     return this.withLock(async () => {
       const state = await this.readState()
@@ -280,7 +314,7 @@ export class VerificationStore {
       // A missing file means a first boot. Malformed existing data is treated as corruption
       // instead of silently resetting verification history.
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return { servicePoints: [], sessions: [], trustedCredentialDefinitions: [] }
+        return { servicePoints: [], sessions: [], trustedCredentialDefinitions: [], vendorSuspensions: [] }
       }
       throw error
     }
@@ -296,6 +330,8 @@ export class VerificationStore {
         trustedCredentialDefinitions: Array.isArray(parsed.trustedCredentialDefinitions)
           ? parsed.trustedCredentialDefinitions
           : [],
+        // Stores written before vendor suspensions existed load with no suspended vendors.
+        vendorSuspensions: Array.isArray(parsed.vendorSuspensions) ? parsed.vendorSuspensions : [],
       }
     } catch (error) {
       throw new AppError(
