@@ -22,7 +22,7 @@ UNIFY is a proof of concept and uses the BCovrin test ledger. It must not be tre
 | Credential issuance | Single offers, partial-success batch offers, tokenized batch activation links, exchange listing, and status lookup |
 | Credential lifecycle | Revocable issuance, sequential revocation-index allocation, temporary suspension, reactivation, permanent revocation, and persisted lifecycle state |
 | Wallet activation | Short-lived activation tokens that hide raw out-of-band invitations; only token hashes are persisted |
-| Service points | Trusted credential-definition policies, vendor service-point registration, stable public verification URLs, activation/deactivation, and session history |
+| Service points | Trusted credential-definition policies, vendor service-point registration, stable public verification URLs, activation/deactivation, vendor-wide verification suspension, and session history |
 | In-person verification | Dynamic per-scan proof requests, non-revocation proof requirements, rate limits, pending-session limits, and short-lived detailed results |
 | Checkout verification | Server-created checkout sessions, short-lived single-use wallet claim capabilities, proof/result binding, and minimal checkout results |
 | Verification decisions | Credo verification, trusted credential-definition enforcement, required-attribute checks, revocation failure mapping, expiry, and stable failure codes |
@@ -43,7 +43,7 @@ UNIFY Identity Agent Service
 Student Wallet    BCovrin test ledger
 ```
 
-- The Admin Portal owns administrator/vendor accounts, university records, issuance orchestration, delivery, and long-term business audit history.
+- The Admin Portal owns administrator/vendor accounts, university records, issuance orchestration, delivery, long-term business audit history, and billing decisions that suspend or reinstate vendor verification access.
 - This service owns issuer/verifier private keys, Credo protocol exchanges, ledger interaction, revocation writes, and the final proof decision.
 - The Student Wallet owns the holder's local keys and credentials and requires explicit student consent before presenting a proof.
 - Vendor-facing systems do not receive the agent API key or wallet result capability. They integrate through the Admin Portal's vendor API.
@@ -174,7 +174,7 @@ Replace all development secrets before running anywhere shared or public.
 | `TAILS_DIRECTORY`, `TAILS_BASE_URL` | Persistent tails storage and wallet/verifier-accessible public URL |
 | `VERIFIER_TRUSTED_CREDENTIAL_DEFINITION_IDS` | Optional comma-separated trust-policy bootstrap list |
 | `VERIFICATION_PUBLIC_BASE_URL` | Admin Portal origin used to build printable verification links |
-| `VERIFICATION_STORE_FILE` | Persistent service-point, trust-policy, and session metadata file |
+| `VERIFICATION_STORE_FILE` | Persistent service-point, trust-policy, vendor-suspension, and session metadata file |
 | `VERIFICATION_SESSION_TTL_MINUTES` | Time allowed to complete or claim a proof request; default `5` |
 | `VERIFICATION_RESULT_VISIBILITY_MINUTES` | Detailed-result retention before proof cleanup; default `15` |
 | `VERIFICATION_RESULT_TOKEN_SECRET` | HMAC key for wallet result and checkout claim capabilities |
@@ -316,7 +316,13 @@ Expired, malformed, mismatched, or reused claims are rejected. A checkout sessio
 
 ### Vendor suspension
 
-The Admin Portal suspends a vendor's verifications when an invoice stays unpaid past its due date. `PUT /api/verifier/vendors/:vendorId/suspension` with `{ "code": "UNPAID_INVOICE", "suspendedAt": "<ISO timestamp>" }` records the suspension, and `DELETE` on the same path lifts it. Both calls are idempotent so the portal can safely retry them.
+The Admin Portal suspends a vendor's verifications when an invoice stays unpaid past its due date and lifts the suspension when access should be restored. The agent enforces the portal's recorded decision; invoice tracking and payment checks remain in the portal. All suspension-management calls require `Authorization: Bearer <AGENT_API_KEY>`.
+
+- `PUT /api/verifier/vendors/:vendorId/suspension` with `{ "code": "UNPAID_INVOICE", "suspendedAt": "<ISO timestamp>" }` creates or replaces the vendor's suspension. `UNPAID_INVOICE` is the only supported code. The timestamp is required and normalized to UTC; missing required fields, unsupported codes, and unparseable timestamps return `400`.
+- `GET` on the same path returns the current suspension state.
+- `DELETE` on the same path lifts the suspension and returns `{ "vendorId": "<vendorId>", "suspended": false, "suspension": null }`, including when no suspension exists.
+
+Successful calls return `200` with `vendorId`, `suspended`, and `suspension`. When suspended, `suspended` is `true` and the suspension record contains `vendorId`, `code`, the portal-supplied `suspendedAt`, and the agent-generated `updatedAt`. Otherwise, `GET` returns the same unsuspended shape as `DELETE`. Writes are idempotent for access control: repeated `PUT` calls keep one suspension per vendor and refresh `updatedAt`, and repeated `DELETE` calls succeed.
 
 While a vendor is suspended, every service point carrying that `vendorId` refuses new static sessions, checkout session creation, and checkout claims with `403 VENDOR_VERIFICATION_SUSPENDED`. This check runs before the service point's own `active` flag, so the wallet can explain that the vendor, not the student or UNIFY, is the reason. Proof exchanges that started before the suspension are allowed to finish.
 
@@ -351,7 +357,7 @@ The Docker `agent-data` volume mounts `/home/node/.afj`, covering:
 - the encrypted Askar wallet and Credo cache;
 - tails files;
 - activation-token metadata;
-- verification trust policies, service points, and sessions;
+- verification trust policies, service points, vendor suspensions, and sessions;
 - credential lifecycle state; and
 - revocation index allocation.
 
@@ -361,7 +367,7 @@ To inspect logs:
 docker compose logs --tail=200 -f agent
 ```
 
-Do not run `docker compose down -v` during ordinary troubleshooting. It permanently deletes local issuer keys, DID/wallet state, activation/session metadata, lifecycle records, and revocation-index allocation. Use it only when intentionally rebuilding the entire local identity environment from scratch.
+Do not run `docker compose down -v` during ordinary troubleshooting. It permanently deletes local issuer keys, DID/wallet state, activation/session metadata, vendor suspensions, lifecycle records, and revocation-index allocation. Use it only when intentionally rebuilding the entire local identity environment from scratch.
 
 ## Commands and CI
 
