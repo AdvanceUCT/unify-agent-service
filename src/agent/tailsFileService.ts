@@ -44,6 +44,10 @@ export class LocalTailsFileService extends BasicTailsFileService {
     return this.localTailsDirectoryPath
   }
 
+  /**
+   * Locate Credo's generated tails file and copy it into the directory served by this agent if needed.
+   * Tails files are public revocation-checking material; use the file hash in its public URL.
+   */
   override async uploadTailsFile(
     agentContext: AgentContext,
     options: { revocationRegistryDefinition: AnonCredsRevocationRegistryDefinition },

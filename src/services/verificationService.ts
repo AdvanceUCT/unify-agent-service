@@ -216,7 +216,10 @@ export class VerificationService {
     return this.store.deleteVendorSuspension(vendorId)
   }
 
-  /** Creates an unclaimed checkout capability without starting a Credo proof exchange yet. */
+  /**
+   * Save a checkout capability without allocating a proof exchange yet.
+   * Retries for the same checkout return its original link so they cannot create parallel claims.
+   */
   async createCheckoutSession(input: {
     vendorId: string
     servicePointId: string
@@ -265,7 +268,10 @@ export class VerificationService {
     })
   }
 
-  /** Consumes a single-use checkout capability and only then creates its proof invitation. */
+  /**
+   * Validate and save the single-use checkout claim before creating a Credo proof exchange.
+   * If creation fails, save a failed session instead of allowing the claim to start another exchange.
+   */
   async claimCheckoutSession(input: {
     verificationRequestId: string
     claimToken: string
@@ -336,7 +342,10 @@ export class VerificationService {
     }
   }
 
-  /** Starts a fresh proof exchange for a scan of a static public service-point code. */
+  /**
+   * Start a public service-point scan after checking vendor status, pending-work limits and policy.
+   * Reuse the wallet's request reference on retries, but reject an expired previous request instead of replacing it.
+   */
   async startSession(input: {
     publicServicePointId: string
     clientRequestId: string
@@ -439,7 +448,10 @@ export class VerificationService {
     }
   }
 
-  /** Returns the capability-protected minimal result used by the presenting wallet. */
+  /**
+   * Check the wallet's result capability before refreshing protocol state.
+   * Return only the decision and timing fields, refusing access after the visibility window closes.
+   */
   async getWalletResult(
     verificationRequestId: string,
     resultToken: string | undefined,
@@ -526,7 +538,10 @@ export class VerificationService {
     return this.syncSession(session, proofRecord)
   }
 
-  /** Deletes completed Credo records after their short result-visibility window closes. */
+  /**
+   * Refresh sessions and remove their Credo proof and invitation after the visibility window ends.
+   * Keep the saved terminal decision, and continue cleaning other sessions if one record fails.
+   */
   async runCleanup(): Promise<void> {
     const sessions = await this.store.listSessions()
 
@@ -562,6 +577,11 @@ export class VerificationService {
 
   // Credo's cryptographic result is necessary but not sufficient: this method also enforces
   // expiry, the service-point policy, trusted credential definitions, and requested fields.
+  /**
+   * Combine Credo evidence with UNIFY trust, required-field, validity and expiry rules.
+   * Preserve the first saved terminal decision so later polling cannot change an approval into a rejection.
+   * Save the result and visibility deadline before returning the permitted fields.
+   */
   private async syncSession(
     session: VerificationSessionRecord,
     providedProofRecord?: ProofExchangeRecord,
@@ -672,6 +692,10 @@ export class VerificationService {
     }
   }
 
+  /**
+   * Read the disclosed student group and use the credential definition tied to that exact proof group.
+   * This prevents fields from one credential being checked against another credential's trusted definition.
+   */
   private async presentationFor(proofRecordId: string, requestedAttributes: string[]): Promise<{
     attributes?: Partial<RevealedVerificationAttributes>
     credentialDefinitionIds: string[]
@@ -787,6 +811,10 @@ export class VerificationService {
     return active
   }
 
+  /**
+   * Create a proof request and invitation using the selected service-point policy.
+   * Grouped fields and the non-revocation requirement tell Credo which evidence it must verify.
+   */
   private async createProofExchange(
     servicePoint: ServicePointRecord,
     policy: TrustedCredentialDefinitionRecord,
@@ -888,6 +916,10 @@ export class VerificationService {
     }
   }
 
+  /**
+   * Choose the explicitly requested enabled trusted definition, or the configured default when none was supplied.
+   * Refuse an unknown definition or an ambiguous default rather than silently trusting another issuer.
+   */
   private async selectTrustedCredentialDefinition(
     credentialDefinitionId?: string,
   ): Promise<TrustedCredentialDefinitionRecord> {
@@ -917,6 +949,10 @@ export class VerificationService {
     )
   }
 
+  /**
+   * Resolve and save the service point's selected trusted definition.
+   * Add both validity dates to modern proof requests; only confirmed older definitions may keep a date-free request.
+   */
   private async policyForServicePoint(servicePoint: ServicePointRecord) {
     const policy = await this.selectTrustedCredentialDefinition(servicePoint.credentialDefinitionId)
     if (!servicePoint.credentialDefinitionId) {
@@ -931,8 +967,8 @@ export class VerificationService {
   }
 
   /**
-   * Resolves a credential definition and schema from the ledger, rejects definitions
-   * without revocation support, and derives the allowed proof attributes from that schema.
+   * Resolve the definition and schema from the ledger before adding verifier trust.
+   * Require revocation support and derive allowed proof fields from that schema, including modern validity fields.
    */
   async registerTrustedCredentialDefinition(input: {
     credentialDefinitionId: string
@@ -1019,6 +1055,9 @@ export class VerificationService {
     return this.store.listTrustedCredentialDefinitions()
   }
 
+  /**
+   * Serialize session creation in this service instance so duplicate checks and insertion happen in order.
+   */
   private async withCreationLock<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.creationQueue.then(operation, operation)
     this.creationQueue = result.then(

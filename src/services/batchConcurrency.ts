@@ -1,4 +1,7 @@
-/** Maps inputs with a fixed worker count while preserving input order. */
+/**
+ * Process inputs with at most the requested number of workers.
+ * Claim each next index before awaiting work and write the result at that index to preserve input order.
+ */
 export async function mapWithConcurrency<T, TResult>(
   inputs: readonly T[],
   concurrency: number,

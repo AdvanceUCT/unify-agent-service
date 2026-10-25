@@ -18,7 +18,10 @@ import { config } from '../config'
 import { buildAgentModules } from './modules'
 import type { UniversityAgent } from './types'
 
-/** Initializes the configured agent and waits until its wallet and transports are ready. */
+/**
+ * Open the configured issuer wallet, install the ledger and credential modules, and register inbound and outbound message transports.
+ * Wait for initialization before returning so callers do not issue credentials against a half-started agent.
+ */
 export async function createAgent(): Promise<UniversityAgent> {
   const initConfig: InitConfig = {
     label: config.agent.label,

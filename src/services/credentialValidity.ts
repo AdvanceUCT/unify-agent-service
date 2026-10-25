@@ -1,4 +1,7 @@
-/** Strict, timezone-qualified credential validity. Never use permissive Date parsing alone. */
+/**
+ * Accept only a timezone-qualified date with a real calendar day.
+ * JavaScript can normalize impossible dates, so check the components before trusting its timestamp.
+ */
 export function credentialDate(value: unknown): number | undefined {
   if (typeof value !== 'string') return undefined
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.exec(value)
@@ -11,6 +14,10 @@ export function credentialDate(value: unknown): number | undefined {
   return Number.isFinite(time) ? time : undefined
 }
 
+/**
+ * Check the inclusive start and exclusive expiry against server time.
+ * Allowlisted legacy definitions may omit both dates; malformed or half-present dates still fail.
+ */
 export function credentialValidityFailure(attributes: Record<string, unknown>, now: number, legacy = false): 'CREDENTIAL_EXPIRED' | 'CREDENTIAL_NOT_YET_VALID' | 'CREDENTIAL_VALIDITY_INVALID' | undefined {
   const start = credentialDate(attributes.validFrom), end = credentialDate(attributes.expiresAt)
   if (legacy && attributes.validFrom === undefined && attributes.expiresAt === undefined) return undefined

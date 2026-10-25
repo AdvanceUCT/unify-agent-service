@@ -56,6 +56,10 @@ export class CredentialLifecycleStore {
     })
   }
 
+  /**
+   * Serialize file operations within this process so concurrent requests do not overwrite each other.
+   * Reset the queue after failure, but still return the error to the caller.
+   */
   private async withLock<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.operationQueue.then(operation, operation)
     this.operationQueue = result.then(
@@ -65,6 +69,10 @@ export class CredentialLifecycleStore {
     return result
   }
 
+  /**
+   * Load lifecycle records and add revision-zero identities to records saved by older versions.
+   * Persist those upgrades without changing their status; corrupt data must not silently become an empty store.
+   */
   private async readAll(): Promise<CredentialLifecycleRecord[]> {
     let raw: string
     try {
@@ -99,6 +107,10 @@ export class CredentialLifecycleStore {
     }
   }
 
+  /**
+   * Write a complete temporary file, then rename it over the store.
+   * This avoids half-written JSON files, but does not coordinate multiple agent processes.
+   */
   private async writeAll(credentials: CredentialLifecycleRecord[]): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true })
     const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`

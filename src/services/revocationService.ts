@@ -43,6 +43,10 @@ export class RevocationService {
     return this.withLock(() => this.lifecycleSnapshot(credentialExchangeId))
   }
 
+  /**
+   * Return saved lifecycle state, or save an ACTIVE revision-zero baseline for a known credential.
+   * This lookup can write local state without changing the public revocation list.
+   */
   private async lifecycleSnapshot(credentialExchangeId: string): Promise<CredentialLifecycleResult> {
     const existing = await this.store.findByCredentialExchangeId(credentialExchangeId)
     if (existing) return existing
@@ -70,6 +74,10 @@ export class RevocationService {
     return this.withLock(() => this.changeLifecycle('revoke', params))
   }
 
+  /**
+   * Run lifecycle work one operation at a time in this service instance.
+   * A failed request must not leave the queue rejected and block later requests.
+   */
   private async withLock<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.operationQueue.then(operation, operation)
     this.operationQueue = result.then(
@@ -79,6 +87,11 @@ export class RevocationService {
     return result
   }
 
+  /**
+   * Apply the requested transition against the saved revision, updating the public status list before local state.
+   * Persist the new revision and event identity before notifying the portal.
+   * Ledger success followed by a local write failure still needs reconciliation; these systems do not share a transaction.
+   */
   private async changeLifecycle(
     operation: LifecycleOperation,
     params: { credentialExchangeId: string; reason?: string; expectedRevision?: number },
@@ -145,6 +158,10 @@ export class RevocationService {
     return { ...record, eventId }
   }
 
+  /**
+   * Reuse the saved result when this transition has already happened.
+   * Returning the same revision and event ID lets the portal recognize a retry instead of applying another change.
+   */
   private idempotentResult(
     operation: LifecycleOperation,
     existing: CredentialLifecycleRecord | undefined,
@@ -169,6 +186,10 @@ export class RevocationService {
     }
   }
 
+  /**
+   * Change this credential's position in the issuer's public revocation list and return its ledger timestamp.
+   * Reactivation marks it issued again; suspension and permanent revocation mark it revoked.
+   */
   private async publishStatusListUpdate(params: {
     credentialRevocationId: string
     operation: LifecycleOperation

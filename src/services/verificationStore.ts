@@ -43,6 +43,10 @@ export class VerificationStore {
 
   constructor(private readonly filePath = config.verifier.storeFile) {}
 
+  /**
+   * Check public IDs and vendor/external references for duplicates before saving.
+   * The shared file queue keeps that check and write together within this process.
+   */
   async insertServicePoint(record: ServicePointRecord): Promise<ServicePointRecord> {
     return this.withLock(async () => {
       const state = await this.readState()
@@ -82,6 +86,10 @@ export class VerificationStore {
     )
   }
 
+  /**
+   * Save the trusted definition and optionally make it the default.
+   * Changing the default also moves service points whose saved definition matches the old default.
+   */
   async upsertTrustedCredentialDefinition(
     record: TrustedCredentialDefinitionRecord,
     makeDefault: boolean,
@@ -109,8 +117,8 @@ export class VerificationStore {
       if (index >= 0) state.trustedCredentialDefinitions[index] = next
       else state.trustedCredentialDefinitions.push(next)
 
-      // Moving the default also moves service points that inherited the previous default;
-      // explicitly pinned service points keep their own credential definition.
+      // Move service points whose saved definition matches the previous default.
+      // There is no separate flag here recording how that definition was selected.
       if (
         makeDefault &&
         previousDefaultCredentialDefinitionId &&
@@ -227,6 +235,10 @@ export class VerificationStore {
     )
   }
 
+  /**
+   * Check the checkout capability and mark it claimed in one queued file update.
+   * Report invalid, reused and missing claims separately so the caller does not create a second exchange.
+   */
   async claimSession(
     id: string,
     claimNonceHash: string,
@@ -295,6 +307,10 @@ export class VerificationStore {
     await this.withLock(() => this.writeState({ ...EMPTY_STORE }))
   }
 
+  /**
+   * Run verifier file operations in order within this process.
+   * Keep the queue usable after failure while returning the error to its original caller.
+   */
   private async withLock<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.operationQueue.then(operation, operation)
     // A failed operation must not poison the queue; later requests still need a chance to run.
@@ -305,6 +321,10 @@ export class VerificationStore {
     return result
   }
 
+  /**
+   * Load saved verifier state, supplying supported older optional collections where absent.
+   * Reject corrupt state instead of losing saved trust settings and session history.
+   */
   private async readState(): Promise<VerificationStoreFile> {
     let raw: string
 
@@ -343,6 +363,10 @@ export class VerificationStore {
     }
   }
 
+  /**
+   * Write the entire snapshot to a temporary file and rename it into place.
+   * This prevents partial file contents, but is not a lock between separate agent processes.
+   */
   private async writeState(state: VerificationStoreFile): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true })
     // Replace the complete JSON document atomically so a crash cannot leave a partially

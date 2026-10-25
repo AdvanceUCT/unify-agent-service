@@ -13,7 +13,10 @@ import { dispatchWebhook } from './webhookDispatcher'
 type ProofEventVerifier = Pick<VerificationService, 'handleProofStateChanged'>
 type ProofWebhookDispatcher = typeof dispatchWebhook
 
-/** Subscribes to proof changes and synchronizes matching verification sessions. */
+/**
+ * Translate proof state changes into the verifier's saved decisions before sending completion notifications.
+ * Use a stable event identity derived from the saved completion time so the portal can recognize repeated notifications.
+ */
 export function registerProofEventHandlers(
   agent: UniversityAgent,
   verifier: ProofEventVerifier = new VerificationService(agent),

@@ -15,7 +15,10 @@ import { dispatchWebhook } from './webhookDispatcher'
 
 type CredentialWebhookDispatcher = typeof dispatchWebhook
 
-/** Subscribes to credential exchange changes and emits normalized lifecycle events. */
+/**
+ * Forward credential exchange state changes with any available revocation identifiers.
+ * A metadata lookup failure is logged but does not stop the state notification; suspension and revocation have their own event type.
+ */
 export function registerCredentialEventHandlers(
   agent: UniversityAgent,
   webhookDispatcher: CredentialWebhookDispatcher = dispatchWebhook,
