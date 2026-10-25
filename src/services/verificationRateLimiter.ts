@@ -21,6 +21,10 @@ export class VerificationRateLimiter {
     this.windowMs = options.windowMs ?? 60_000
   }
 
+  /**
+   * Apply both the caller-IP and service-point request windows before allowing more verification work.
+   * These counters live only in memory and reset on restart; they are not shared across multiple processes.
+   */
   check(ip: string, servicePointId: string, now = Date.now()): void {
     this.record(this.ipAttempts, ip || 'unknown', this.options.perIp, now, 'VERIFICATION_IP_RATE_LIMITED')
     this.record(

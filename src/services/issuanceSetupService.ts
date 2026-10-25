@@ -40,6 +40,10 @@ export class IssuanceSetupService {
     this.schemas = new SchemaService(agent)
   }
 
+  /**
+   * Use the supplied issuer identity to register the schema and credential definition, followed by revocation setup when requested.
+   * Return the already-created identifiers if revocation setup fails, so the portal can recover that partial setup.
+   */
   async setup(params: IssuanceSetupInput): Promise<IssuanceSetupResult> {
     const supportRevocation = params.credentialDefinition.supportRevocation ?? Boolean(params.revocation)
 

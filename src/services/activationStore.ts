@@ -53,6 +53,10 @@ export class ActivationStore {
     await this.saveMany([record])
   }
 
+  /**
+   * Merge activation records under the file queue, then replace the store once for the whole batch.
+   * Preserve unrelated links rather than rebuilding the store from only this request.
+   */
   async saveMany(records: StoredActivationRecord[]): Promise<void> {
     if (records.length === 0) return
 
@@ -107,6 +111,10 @@ export class ActivationStore {
     await this.withLock(() => this.writeAll([]))
   }
 
+  /**
+   * Run file operations in order within this process.
+   * Recover the shared queue after failure without hiding the original caller's error.
+   */
   private async withLock<T>(operation: () => Promise<T>): Promise<T> {
     const previous = ActivationStore.operationQueues.get(this.filePath) ?? Promise.resolve()
     const result = previous.then(operation, operation)
@@ -114,6 +122,10 @@ export class ActivationStore {
     return result
   }
 
+  /**
+   * Treat a missing activation file as an empty store, but reject malformed saved data.
+   * Silently resetting a corrupt file would lose previously issued links.
+   */
   private async readAll(): Promise<StoredActivationRecord[]> {
     let raw: string
 
@@ -135,6 +147,9 @@ export class ActivationStore {
     return parsed.activations
   }
 
+  /**
+   * Save the complete activation snapshot to a temporary file before renaming it into place.
+   */
   private async writeAll(activations: StoredActivationRecord[]): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true })
 

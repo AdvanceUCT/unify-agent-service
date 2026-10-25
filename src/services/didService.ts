@@ -27,6 +27,10 @@ export class DidService {
     return dids[0]?.did ?? null
   }
 
+  /**
+   * Generate the issuer key locally, register its public identity on BCovrin's test ledger, then import it into Credo.
+   * The private seed stays inside this service and its wallet; this is not production ledger onboarding.
+   */
   async createIssuerDid(params: { alias?: string }): Promise<{ did: string }> {
     const existing = await this.getIssuerDid()
     if (existing) {

@@ -11,6 +11,10 @@ import { config } from './config'
 import { registerAgentEventHandlers } from './events'
 import { startVerificationCleanup } from './services/verificationCleanup'
 
+/**
+ * Initialize the native agent before accepting API work, then attach events and periodic cleanup.
+ * Stop cleanup and close the agent on process signals so wallet writes and ledger connections can finish.
+ */
 async function main(): Promise<void> {
   const agent = await createAgent()
   console.log(`[agent] initialised — label="${agent.config.label}"`)

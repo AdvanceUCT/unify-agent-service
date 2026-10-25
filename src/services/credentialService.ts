@@ -56,6 +56,10 @@ export class CredentialService {
     }
   }
 
+  /**
+   * Reserve a revocation-list position when requested, then create an invitation the wallet can open.
+   * The exchange ID identifies the protocol conversation, not proof that the student accepted it.
+   */
   async createOfferInvitation(params: CredentialOfferInvitationInput): Promise<CredentialOfferInvitationResult> {
     const [revocation] = await this.prepareRevocationIndexes(
       params.credentialDefinitionId,
@@ -65,6 +69,10 @@ export class CredentialService {
     return this.createOfferInvitationWithRevocation(params, revocation)
   }
 
+  /**
+   * Convert attributes to AnonCreds strings and wrap the credential offer in an invitation link.
+   * Return protocol identifiers and any reserved revocation position for later lifecycle changes.
+   */
   private async createOfferInvitationWithRevocation(
     params: CredentialOfferInvitationInput,
     revocation?: { revocationRegistryDefinitionId: string; revocationRegistryIndex: number },
@@ -117,6 +125,10 @@ export class CredentialService {
     return result
   }
 
+  /**
+   * Check that the revocation registry belongs to this credential definition before reserving positions.
+   * Reserve the range before issuing so concurrent batches cannot reuse a position.
+   */
   private async prepareRevocationIndexes(
     credentialDefinitionId: string,
     revocationRegistryDefinitionId: string | undefined,
@@ -158,6 +170,10 @@ export class CredentialService {
     }))
   }
 
+  /**
+   * Reserve the batch's revocation positions, then issue offers with a limited number of workers.
+   * Keep student order and report each failure without discarding successful offers.
+   */
   async createBatchOfferResults(params: {
     credentialDefinitionId: string
     revocationRegistryDefinitionId?: string
@@ -206,6 +222,10 @@ export class CredentialService {
     )
   }
 
+  /**
+   * Separate successful invitations and failures while retaining each student's external reference.
+   * This lets the portal match every result back to the original request.
+   */
   async createBatchOfferInvitations(_params: {
     credentialDefinitionId: string
     revocationRegistryDefinitionId?: string
@@ -257,6 +277,10 @@ export class CredentialService {
     return { offers, failures }
   }
 
+  /**
+   * Return exchange state and the validity dates saved in the credential attributes.
+   * Do not infer signed dates from acceptance time or expose the entire Credo record.
+   */
   async getStatus(_credentialExchangeId: string): Promise<{
     credentialValidity: { validFrom?: string; expiresAt?: string }
     id: string

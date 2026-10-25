@@ -23,6 +23,10 @@ export interface AgentStatus {
 export class StatusService {
   constructor(private readonly agent: UniversityAgent) {}
 
+  /**
+   * Report whether Credo is initialized and actively probe the configured ledger pool.
+   * A reachable HTTP process alone does not establish that ledger operations are available.
+   */
   async getStatus(): Promise<AgentStatus> {
     const [network] = indyNetworks
     const ledger = {

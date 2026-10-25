@@ -1,5 +1,5 @@
 /**
- * @fileoverview Signs and delivers agent events to the portal with bounded retry behavior.
+ * @fileoverview Signs agent events and makes one delivery attempt to the portal.
  * @module events/webhookDispatcher
  */
 
@@ -88,7 +88,10 @@ function signatureFor(payload: string, signingSecret: string) {
   return `sha256=${createHmac('sha256', signingSecret).update(payload).digest('hex')}`
 }
 
-/** Delivers a signed webhook and retries only failures considered transient. */
+/**
+ * Serialize the event once and sign those exact bytes before sending to the configured portal URL.
+ * Make one delivery attempt and log failures; this function neither persists retries nor undoes the original event.
+ */
 export async function dispatchWebhook(
   payload: WebhookPayload,
   options: WebhookDispatchOptions = {},

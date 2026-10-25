@@ -11,6 +11,10 @@ type FailedState = { state: 'failed'; reason: string }
 type ActionState = { state: 'action'; action: string }
 type RegistrationState = FinishedState | FailedState | ActionState | { state: 'wait' }
 
+/**
+ * Require a completed ledger registration because this API does not manage later endorsement steps.
+ * Surface waiting or external-action states rather than returning an identifier that may not exist yet.
+ */
 function assertFinished(operation: string, state: RegistrationState): void {
   if (state.state === 'finished') return
   if (state.state === 'failed') {
@@ -88,6 +92,10 @@ export class SchemaService {
     return { credentialDefinitionId }
   }
 
+  /**
+   * Publish the revocation registry and then its initial status list.
+   * Return success only when both finish and the initial list has a ledger timestamp.
+   */
   async registerRevocationRegistry(_params: {
     issuerDid: string
     credentialDefinitionId: string

@@ -90,6 +90,10 @@ export class ActivationLinkService {
     this.credentials = new CredentialService(agent)
   }
 
+  /**
+   * Queue batches so overlapping retries cannot both create offers before either batch saves its results.
+   * This queue coordinates only this service instance.
+   */
   async createBatchActivationLinks(params: {
     credentialDefinitionId: string
     revocationRegistryDefinitionId?: string
@@ -101,6 +105,11 @@ export class ActivationLinkService {
     return result
   }
 
+  /**
+   * Match stable request keys to saved offers, refresh their links and issue only missing offers.
+   * A request key identifies the same instruction across retries; persist its hash rather than the original.
+   * Save activation records before returning links, preserving student order and individual failures.
+   */
   private async createBatchActivationLinksUnlocked(params: {
     credentialDefinitionId: string
     revocationRegistryDefinitionId?: string

@@ -30,6 +30,10 @@ export type VerificationDecisionResult = {
   attributes?: RevealedVerificationAttributes
 }
 
+/**
+ * Translate Credo error wording into UNIFY failure codes.
+ * Distinguish a credential reported as no longer current from failure to perform the revocation check.
+ */
 function revocationFailureFromError(errorMessage?: string): VerificationFailureCode | undefined {
   const message = errorMessage?.toLowerCase()
   if (!message) return undefined
@@ -60,7 +64,10 @@ function protocolFailureCode(errorMessage?: string): VerificationFailureCode {
   return revocationFailureFromError(errorMessage) ?? 'CREDO_PROTOCOL_ERROR'
 }
 
-/** Applies cryptographic, trust, attribute, expiry, and revocation checks in a fixed order. */
+/**
+ * Turn protocol evidence into a UNIFY decision. Approval requires a verified proof, trusted definition, required fields and valid dates.
+ * The caller must supply attributes from the verified presentation, not untrusted wallet input.
+ */
 export function evaluateVerification(input: VerificationDecisionInput): VerificationDecisionResult {
   if (input.expired) {
     return { decision: 'Expired', failureCode: 'PROOF_REQUEST_EXPIRED' }

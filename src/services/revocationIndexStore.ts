@@ -24,6 +24,10 @@ export class RevocationIndexStore {
     return reserved
   }
 
+  /**
+   * Reserve unused revocation positions and save the next free position before creating offers.
+   * Failed offers do not release reserved positions, preventing their reuse for a different credential.
+   */
   async reserveRange(
     revocationRegistryDefinitionId: string,
     count: number,
@@ -54,6 +58,10 @@ export class RevocationIndexStore {
     })
   }
 
+  /**
+   * Serialize position allocation in this process so simultaneous batches cannot reserve the same range.
+   * Failure must not prevent later queued allocations.
+   */
   private async withLock<T>(operation: () => Promise<T>): Promise<T> {
     const previous = RevocationIndexStore.operationQueues.get(this.filePath) ?? Promise.resolve()
     const result = previous.then(operation, operation)
@@ -64,6 +72,9 @@ export class RevocationIndexStore {
     return result
   }
 
+  /**
+   * Load the next-position counters and reject invalid values rather than risking revocation-position reuse.
+   */
   private async readState(): Promise<RevocationIndexStoreFile> {
     let raw: string
     try {
@@ -89,6 +100,9 @@ export class RevocationIndexStore {
     }
   }
 
+  /**
+   * Write and rename a complete counter snapshot so readers do not see a partial update.
+   */
   private async writeState(state: RevocationIndexStoreFile): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true })
     const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`

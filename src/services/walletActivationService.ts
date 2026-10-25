@@ -23,13 +23,19 @@ function isExpired(expiresAt: string, now = new Date()) {
   return new Date(expiresAt).getTime() <= now.getTime()
 }
 
-/** Resolves and atomically consumes wallet activation records. */
+/**
+ * Reads activation capabilities and returns their credential invitations after checking expiry.
+ */
 export class WalletActivationService {
   constructor(
     _agent: UniversityAgent,
     private readonly store = new ActivationStore(),
   ) {}
 
+  /**
+   * Find an activation by token and reject expiry before returning the saved credential invitation.
+   * This method reads the activation; it does not consume its token or create a payment session.
+   */
   async resolve(params: { sourceUrl?: string; token?: string }): Promise<ResolvedWalletActivation> {
     const token = params.token?.trim()
 

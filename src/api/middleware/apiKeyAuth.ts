@@ -42,7 +42,10 @@ function safeEqual(left: string, right: string): boolean {
   return timingSafeEqual(leftBuffer, rightBuffer)
 }
 
-/** Rejects requests whose bearer key does not match the configured agent API key. */
+/**
+ * Allow only the listed public entry points to bypass the shared portal-to-agent API key.
+ * Those public handlers still validate their own capabilities and input; bypassing this key is not permission to trust wallet data.
+ */
 export const apiKeyAuth: RequestHandler = (req, res, next) => {
   // Health checks and student activation resolve cannot depend on the Admin Portal key.
   if (isPublicPath(req.path) || isPublicWalletVerificationPath(req.path, req.method)) {
